@@ -46,7 +46,7 @@ npu-smi info
 python -m mfe.scripts.check_ascend_env
 ```
 
-更详细步骤见 [docs/openeuler-ascend.md](docs/openeuler-ascend.md)。
+Ubuntu 22.04 服务器部署和试运行优先看 [docs/ubuntu22-ascend-deploy.md](docs/ubuntu22-ascend-deploy.md)。openEuler 说明见 [docs/openeuler-ascend.md](docs/openeuler-ascend.md)。
 
 ## 安装
 
