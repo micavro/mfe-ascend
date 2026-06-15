@@ -151,7 +151,7 @@ class vLLMWorker:
         logging.info("vLLMWorker[%s] exited.", self.id)
         return "Worker exited."
 
-    def run(self, debug: bool = True) -> None:
+    def run(self, debug: bool = False) -> None:
         """循环：cmd_queue 取命令 → execute/exit → result 写 response_queue。"""
         while True:
             msg = self.cmd_queue.get()
@@ -187,7 +187,20 @@ class vLLMWorker:
             except Exception as e:
                 if debug:
                     raise
-                self.response_queue.put({"command": "error", "result": repr(e), "elapsed_time": 0.0})
+                op_id = "?"
+                if params:
+                    exe = params[0]
+                    op_id = getattr(getattr(exe, "op", None), "id", "?")
+                self.response_queue.put({
+                    "command": "error",
+                    "result": {
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "op_name": op_id,
+                        "worker_id": self.id,
+                    },
+                    "elapsed_time": 0.0,
+                })
 
 
 if __name__ == '__main__':

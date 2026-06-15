@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from typing import Dict, List, Set, Tuple
+import math
+import os
 import yaml
-import torch
 
 from mfe.components import Operator, ModelConfig
 
 
 def load_config(config_path: str) -> dict:
     with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(os.path.expandvars(f.read()))
 
 
-def build_ops_from_config(config: dict) -> Tuple[Dict[str, Operator], List[Operator], List[Operator], Set[str]]:
+def build_ops_from_config(config: dict, model_override: str | None = None) -> Tuple[Dict[str, Operator], List[Operator], List[Operator], Set[str]]:
     """从 config 构建 DAG，填 op 的 input_ops/output_ops/model_config 及 max_distance。返回 (ops, start_ops, end_ops, models)。"""
     conf_ops = config.get("ops")
     if not isinstance(conf_ops, dict) or not conf_ops:
@@ -44,7 +45,7 @@ def build_ops_from_config(config: dict) -> Tuple[Dict[str, Operator], List[Opera
         output_ids = spec.get("output_ops", []) or []
         op.input_ops = [ops[k] for k in input_ids]
         op.output_ops = [ops[k] for k in output_ids]
-        model = spec["model"]
+        model = model_override or os.environ.get("MFE_MODEL_PATH") or spec["model"]
         models.add(model)
         op.model_config = ModelConfig(
             model_name=model,
@@ -52,7 +53,7 @@ def build_ops_from_config(config: dict) -> Tuple[Dict[str, Operator], List[Opera
             temperature=spec.get("temperature", 0.7),
             top_p=spec.get("top_p", 0.9),
             max_tokens=spec.get("max_tokens", 256),
-            max_batch_size=spec.get("max_batch_size", torch.inf),
+            max_batch_size=spec.get("max_batch_size", math.inf),
             dtype=spec.get("dtype", "bfloat16"),
             quantization=spec.get("quantization", None),
             lora_config=spec.get("lora_config", None),
@@ -72,8 +73,8 @@ def build_ops_from_config(config: dict) -> Tuple[Dict[str, Operator], List[Opera
     return ops, start_ops, end_ops, models
 
 
-def build_from_path(config_path: str) -> Tuple[Dict[str, Operator], List[Operator], List[Operator], Set[str]]:
-    return build_ops_from_config(load_config(config_path))
+def build_from_path(config_path: str, model_override: str | None = None) -> Tuple[Dict[str, Operator], List[Operator], List[Operator], Set[str]]:
+    return build_ops_from_config(load_config(config_path), model_override=model_override)
 
 
 def _compute_max_distances(ops: Dict[str, Operator], end_ops: List[Operator]) -> None:

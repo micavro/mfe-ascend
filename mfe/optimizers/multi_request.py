@@ -26,7 +26,19 @@ logger.setLevel("INFO")
 
 
 def _worker_process(worker_id: int, physical_device_id: int, cmd_queue: mp.Queue, result_queue: mp.Queue, use_test_worker: bool = False) -> None:
-    (TestWorker if use_test_worker else vLLMWorker)(worker_id, physical_device_id, cmd_queue, result_queue).run()
+    try:
+        (TestWorker if use_test_worker else vLLMWorker)(worker_id, physical_device_id, cmd_queue, result_queue).run()
+    except Exception as exc:
+        result_queue.put({
+            "command": "error",
+            "result": {
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "op_name": "?",
+                "worker_id": worker_id,
+            },
+            "elapsed_time": 0.0,
+        })
 
 
 class MultiRequestOptimizer:
@@ -98,12 +110,14 @@ class MultiRequestOptimizer:
 
     def _get_dag(self, template: str) -> Tuple[Dict[str, Operator], List[Operator], List[Operator]]:
         path = self._resolve_template_path(template)
-        if path in self._template_cache:
-            ops, start_ops, end_ops, _ = self._template_cache[path]
+        model_override = os.environ.get("MFE_MODEL_PATH") or None
+        cache_key = f"{path}::{model_override or ''}"
+        if cache_key in self._template_cache:
+            ops, start_ops, end_ops, _ = self._template_cache[cache_key]
             return ops, start_ops, end_ops
         config = load_config(path)
-        ops, start_ops, end_ops, models = build_ops_from_config(config)
-        self._template_cache[path] = (ops, start_ops, end_ops, models)
+        ops, start_ops, end_ops, models = build_ops_from_config(config, model_override=model_override)
+        self._template_cache[cache_key] = (ops, start_ops, end_ops, models)
         return ops, start_ops, end_ops
 
     def submit(self, dag: str, input_text: str) -> str:
@@ -119,10 +133,37 @@ class MultiRequestOptimizer:
             q = self.requests.get(uid)
         if q is None:
             return None
+        if q.status == "error":
+            return {
+                "uid": uid,
+                "status": "error",
+                "op_output": dict(q.op_output),
+                "benchmark": {k: [float(t[0]), float(t[1])] for k, t in q.benchmark.items()},
+                "worker_assignments": dict(q.worker_assignments),
+                "total_answer_time": None,
+                "arrive_time": q.create_time,
+                "done_time": None,
+                "error_type": q.error_type,
+                "error_message": q.error_message,
+                "failed_op": q.failed_op,
+                "worker_id": q.worker_id,
+            }
         try:
             ops, _, end_ops = self._get_dag(q.template)
         except Exception:
-            return {"uid": uid, "status": "error", "op_output": {}, "benchmark": {}, "total_answer_time": None, "arrive_time": None, "done_time": None}
+            return {
+                "uid": uid,
+                "status": "error",
+                "op_output": {},
+                "benchmark": {},
+                "total_answer_time": None,
+                "arrive_time": q.create_time,
+                "done_time": None,
+                "error_type": "TemplateError",
+                "error_message": f"failed to load template: {q.template}",
+                "failed_op": None,
+                "worker_id": None,
+            }
         end_ids = {e.id for e in end_ops}
         done = set(q.op_output.keys())
         if end_ids and end_ids <= done:
@@ -153,6 +194,8 @@ class MultiRequestOptimizer:
                     continue
                 end_ids = {e.id for e in end_ops}
                 if end_ids <= set(q.op_output.keys()):
+                    continue
+                if q.status == "error":
                     continue
                 for op in ops.values():
                     if op.id in q.op_output or (uid, op.id) in self._inflight_tasks:
@@ -192,7 +235,23 @@ class MultiRequestOptimizer:
                                 for rec in result.get("item", []):
                                     q.op_output[op_name] = rec["output"]
                                     q.step += 1
+                                    q.status = "running"
                                     q.benchmark[op_name] = rec["benchmark"]
+                elif isinstance(msg, dict) and msg.get("command") == "error":
+                    err = msg.get("result", {})
+                    if not isinstance(err, dict):
+                        err = {"error_type": "WorkerError", "error_message": str(err)}
+                    with self._lock:
+                        q = self.requests.get(uid)
+                        if q:
+                            q.status = "error"
+                            q.error_type = err.get("error_type", "WorkerError")
+                            q.error_message = err.get("error_message", "worker failed")
+                            q.failed_op = err.get("op_name") or getattr(op, "id", None)
+                            q.worker_id = err.get("worker_id", i)
+                            q.worker_assignments[getattr(op, "id", "?")] = i
+                    if is_verbose():
+                        print(f"[OPT] !! Worker {i} op={getattr(op, 'id', '?')} error={err.get('error_message')}", flush=True)
 
             for i in range(self.device_cnt):
                 if self._inflight[i] is not None:
@@ -212,6 +271,7 @@ class MultiRequestOptimizer:
                 with self._lock:
                     q = self.requests.get(uid)
                     if q:
+                        q.status = "running"
                         q.worker_assignments[op.id] = i
                 if is_verbose():
                     print(f"[OPT] -> Worker {i} op={op.id} query_ids=[{uid}] t={time.perf_counter():.1f}", flush=True)

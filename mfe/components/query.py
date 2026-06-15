@@ -11,6 +11,10 @@ class Query:
         self.template = template or ""
         self.prompt_len = len(prompt) if prompt else 0
         self.status = "pending"
+        self.error_type = None
+        self.error_message = None
+        self.failed_op = None
+        self.worker_id = None
         self.priority = priority
         self.op_output = {}
         self.step = 0
