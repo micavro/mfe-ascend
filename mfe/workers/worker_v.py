@@ -32,6 +32,13 @@ logging.getLogger("vllm.worker").setLevel(_level_value)
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 
+def _model_cache_key(model_name: str) -> str:
+    model_name = os.path.expandvars(os.path.expanduser(str(model_name).strip()))
+    if os.path.isdir(model_name):
+        return os.path.abspath(model_name)
+    return model_name
+
+
 class vLLMWorker:
     def __init__(self, id: int, physical_device_id: int, cmd_queue: "Any", result_queue: "Any") -> None:
         self.id = id
@@ -39,6 +46,7 @@ class vLLMWorker:
         configure_worker_device(physical_device_id, self.backend)
         self.device = device_label(physical_device_id, self.backend)
         self.model_name: Optional[str] = None
+        self.model_key: Optional[str] = None
         self.llm = None
         self.tokenizer = None
         self.cmd_queue = cmd_queue
@@ -60,8 +68,13 @@ class vLLMWorker:
             max_tokens=cfg.max_tokens,
             min_tokens=getattr(cfg, "min_tokens", 0),
         )
-        model_name = cfg.model_name
-        if model_name != self.model_name:
+        model_name = _model_cache_key(cfg.model_name)
+        if model_name != self.model_key:
+            if is_verbose():
+                print(
+                    f"[Worker {self.id}] loading model for op={op.id}: {model_name}",
+                    flush=True,
+                )
             if self.llm is not None:
                 try:
                     del self.llm
@@ -85,6 +98,9 @@ class vLLMWorker:
             )
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
             self.model_name = model_name
+            self.model_key = model_name
+        elif is_verbose():
+            print(f"[Worker {self.id}] reuse model for op={op.id}: {model_name}", flush=True)
         self.prefix = (getattr(cfg, "system_prompt", None) or "").strip()
         self.common_message: str = (getattr(cfg, "common_message", "") or "").strip()
 
