@@ -7,7 +7,7 @@ MFE Ascend 是基于 `micavro/mfe` 的昇腾迁移版本。它保留原来的 YA
 - 项目名改为 `mfe-ascend`，源码整理到标准 Python 包 `mfe/`。
 - 默认推理后端为 Ascend，可通过 `MFE_ACCELERATOR=ascend|cuda|auto` 切换。
 - 调度器运行时探测可见设备，不写死卡数。
-- Worker 在导入 vLLM 前设置 `ASCEND_RT_VISIBLE_DEVICES`、`NPU_VISIBLE_DEVICES`、`VLLM_TARGET_DEVICE=npu`。
+- Worker 在导入 vLLM 前设置 `ASCEND_RT_VISIBLE_DEVICES`、`NPU_VISIBLE_DEVICES`、`VLLM_TARGET_DEVICE=npu`、`VLLM_WORKER_MULTIPROC_METHOD=spawn`。
 - 默认不安装或覆盖容器内的 `torch`、`torch-npu`、`vllm`、`vllm-ascend`；旧版组合记录在 `constraints/`。
 
 ## 目录结构

@@ -42,6 +42,7 @@ def apply_device_env(device_ids: str | None, accelerator: str | None = None) -> 
     if backend == "ascend":
         os.environ.setdefault("VLLM_TARGET_DEVICE", "npu")
         os.environ.setdefault("VLLM_USE_V1", "1")
+        os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
     if device_ids:
         os.environ["MFE_DEVICE_IDS"] = device_ids
         if backend == "ascend":

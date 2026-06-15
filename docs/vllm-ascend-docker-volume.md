@@ -93,6 +93,7 @@ export MFE_OUTPUT_DIR=/data/mfe/mfe-ascend/data/gsm8k
 export MFE_OFFLINE=1
 export VLLM_TARGET_DEVICE=npu
 export VLLM_USE_V1=1
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 python -m pip install -e . --no-deps
 ```

@@ -125,6 +125,7 @@ def main() -> None:
             "NPU_VISIBLE_DEVICES",
             "VLLM_TARGET_DEVICE",
             "VLLM_USE_V1",
+            "VLLM_WORKER_MULTIPROC_METHOD",
             "HF_HUB_OFFLINE",
             "TRANSFORMERS_OFFLINE",
             "HF_DATASETS_OFFLINE",

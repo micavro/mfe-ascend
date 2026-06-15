@@ -79,6 +79,7 @@ def configure_worker_device(device_id: int, backend: AcceleratorBackend | None =
         os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(device_id)
         os.environ["NPU_VISIBLE_DEVICES"] = str(device_id)
         os.environ.setdefault("VLLM_TARGET_DEVICE", "npu")
+        os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
         # vllm-ascend 0.9.x 推荐 V1 Engine；新版本默认 V1 时该变量也无害。
         os.environ.setdefault("VLLM_USE_V1", "1")
         try:
