@@ -18,6 +18,7 @@ def main() -> None:
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument("--max-model-len", type=int, default=2048)
     p.add_argument("--dtype", default="bfloat16")
+    p.add_argument("--gpu-memory-utilization", type=float, default=None)
     p.add_argument("--device-ids", default=None, help="设备 ID，如 0；也可用 MFE_DEVICE_IDS")
     p.add_argument("--accelerator", default="ascend", choices=("ascend", "cuda", "auto"))
     p.add_argument("--offline", action="store_true")
@@ -36,12 +37,18 @@ def main() -> None:
 
     from vllm import LLM, SamplingParams
 
-    llm = LLM(
-        model=args.model_path,
-        dtype=args.dtype,
-        max_model_len=args.max_model_len,
-        enforce_eager=True,
-    )
+    gpu_memory_utilization = args.gpu_memory_utilization
+    if gpu_memory_utilization is None and os.environ.get("MFE_GPU_MEMORY_UTILIZATION"):
+        gpu_memory_utilization = float(os.environ["MFE_GPU_MEMORY_UTILIZATION"])
+    llm_kwargs = {
+        "model": args.model_path,
+        "dtype": args.dtype,
+        "max_model_len": args.max_model_len,
+        "enforce_eager": True,
+    }
+    if gpu_memory_utilization is not None:
+        llm_kwargs["gpu_memory_utilization"] = gpu_memory_utilization
+    llm = LLM(**llm_kwargs)
     params = SamplingParams(max_tokens=args.max_tokens, temperature=args.temperature)
     outputs = llm.generate([args.prompt], params)
     text = outputs[0].outputs[0].text if outputs and outputs[0].outputs else ""
