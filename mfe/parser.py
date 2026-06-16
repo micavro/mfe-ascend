@@ -59,6 +59,7 @@ def build_ops_from_config(config: dict, model_override: str | None = None) -> Tu
             lora_config=spec.get("lora_config", None),
             max_model_len=spec.get("max_model_len", None),
             min_tokens=spec.get("min_tokens", 0),
+            gpu_memory_utilization=spec.get("gpu_memory_utilization", None),
             use_chat_template=spec.get("use_chat_template", True),
         )
         op.is_duplicate = False

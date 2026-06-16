@@ -78,6 +78,19 @@ python -m mfe.scripts.client --dataset gsm8k --data-dir "$MFE_DATA_DIR" -n 5 --t
 export MFE_MAX_BATCH_SIZE=4
 ```
 
+vLLM 的显存使用比例可通过环境变量临时覆盖：
+
+```bash
+export MFE_GPU_MEMORY_UTILIZATION=0.95
+```
+
+也可以写进 YAML 的 op 配置里：
+
+```yaml
+max_model_len: 4096
+gpu_memory_utilization: 0.95
+```
+
 ## openEuler/Ascend 环境
 
 目标环境应先具备：

@@ -89,13 +89,18 @@ class vLLMWorker:
                     pass
             self.tokenizer = None
             empty_device_cache(self.backend)
-            self.llm = LLM(
-                model_name,
-                dtype=str(getattr(cfg, "dtype", "bfloat16")),
-                quantization=getattr(cfg, "quantization", None),
-                max_model_len=getattr(cfg, "max_model_len", None),
-                enforce_eager=self.enforce_eager,
+            llm_kwargs: Dict[str, Any] = {
+                "dtype": str(getattr(cfg, "dtype", "bfloat16")),
+                "quantization": getattr(cfg, "quantization", None),
+                "max_model_len": getattr(cfg, "max_model_len", None),
+                "enforce_eager": self.enforce_eager,
+            }
+            gpu_memory_utilization = os.environ.get("MFE_GPU_MEMORY_UTILIZATION") or getattr(
+                cfg, "gpu_memory_utilization", None
             )
+            if gpu_memory_utilization is not None:
+                llm_kwargs["gpu_memory_utilization"] = float(gpu_memory_utilization)
+            self.llm = LLM(model_name, **llm_kwargs)
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
             self.model_name = model_name
             self.model_key = model_name
