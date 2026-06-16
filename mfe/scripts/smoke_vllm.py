@@ -16,7 +16,7 @@ def main() -> None:
     p.add_argument("--prompt", default="What is 1+1? Answer briefly.", help="测试 prompt")
     p.add_argument("--max-tokens", type=int, default=32)
     p.add_argument("--temperature", type=float, default=0.0)
-    p.add_argument("--max-model-len", type=int, default=2048)
+    p.add_argument("--max-model-len", type=int, default=None)
     p.add_argument("--dtype", default="bfloat16")
     p.add_argument("--gpu-memory-utilization", type=float, default=None)
     p.add_argument("--device-ids", default=None, help="设备 ID，如 0；也可用 MFE_DEVICE_IDS")
@@ -40,10 +40,15 @@ def main() -> None:
     gpu_memory_utilization = args.gpu_memory_utilization
     if gpu_memory_utilization is None and os.environ.get("MFE_GPU_MEMORY_UTILIZATION"):
         gpu_memory_utilization = float(os.environ["MFE_GPU_MEMORY_UTILIZATION"])
+    max_model_len = args.max_model_len
+    if max_model_len is None and os.environ.get("MFE_MAX_MODEL_LEN"):
+        max_model_len = int(os.environ["MFE_MAX_MODEL_LEN"])
+    if max_model_len is None:
+        max_model_len = 2048
     llm_kwargs = {
         "model": args.model_path,
         "dtype": args.dtype,
-        "max_model_len": args.max_model_len,
+        "max_model_len": max_model_len,
         "enforce_eager": True,
     }
     if gpu_memory_utilization is not None:

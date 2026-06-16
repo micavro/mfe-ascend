@@ -144,6 +144,7 @@ def collect_run_info(config: RuntimeConfig | None = None, cwd: str | None = None
         "data_dir": config.data_dir,
         "output_dir": config.output_dir,
         "offline": config.offline,
+        "max_model_len": os.environ.get("MFE_MAX_MODEL_LEN"),
         "gpu_memory_utilization": os.environ.get("MFE_GPU_MEMORY_UTILIZATION"),
         "packages": {
             name: package_version(name)

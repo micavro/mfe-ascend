@@ -330,6 +330,7 @@ def main() -> None:
     p.add_argument("--output-dir", default=None, help="结果输出目录；默认 MFE_OUTPUT_DIR 或 data/{dataset}")
     p.add_argument("--device-ids", default=None, help="可见设备 ID，如 0 或 0,1；也可用 MFE_DEVICE_IDS")
     p.add_argument("--accelerator", default=None, choices=("ascend", "cuda", "auto"), help="推理后端；默认 MFE_ACCELERATOR 或 ascend")
+    p.add_argument("--max-model-len", type=int, default=None, help="覆盖 vLLM max_model_len；也可用 MFE_MAX_MODEL_LEN")
     p.add_argument("--offline", action="store_true", help="启用 HuggingFace/Transformers/Datasets 离线模式")
     p.add_argument("--send-interval", type=float, default=0.0, help="发送间隔（秒）")
     p.add_argument("--worker-delay", type=float, default=None, help="TestWorker 模拟延迟（秒）")
@@ -342,6 +343,8 @@ def main() -> None:
         os.environ["MFE_VERBOSE"] = "1"
     if args.worker_delay is not None:
         os.environ["MFE_TEST_WORKER_DELAY"] = str(args.worker_delay)
+    if args.max_model_len is not None:
+        os.environ["MFE_MAX_MODEL_LEN"] = str(args.max_model_len)
 
     req_q = mp.Queue()
     resp_q = mp.Queue()

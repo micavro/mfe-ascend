@@ -46,7 +46,7 @@ class vLLMWorker:
         configure_worker_device(physical_device_id, self.backend)
         self.device = device_label(physical_device_id, self.backend)
         self.model_name: Optional[str] = None
-        self.model_key: Optional[str] = None
+        self.model_key: Optional[tuple[Any, ...]] = None
         self.llm = None
         self.tokenizer = None
         self.cmd_queue = cmd_queue
@@ -69,10 +69,22 @@ class vLLMWorker:
             min_tokens=getattr(cfg, "min_tokens", 0),
         )
         model_name = _model_cache_key(cfg.model_name)
-        if model_name != self.model_key:
+        dtype = str(getattr(cfg, "dtype", "bfloat16"))
+        quantization = getattr(cfg, "quantization", None)
+        max_model_len = os.environ.get("MFE_MAX_MODEL_LEN") or getattr(cfg, "max_model_len", None)
+        if max_model_len is not None:
+            max_model_len = int(max_model_len)
+        gpu_memory_utilization = os.environ.get("MFE_GPU_MEMORY_UTILIZATION") or getattr(
+            cfg, "gpu_memory_utilization", None
+        )
+        if gpu_memory_utilization is not None:
+            gpu_memory_utilization = float(gpu_memory_utilization)
+        engine_key = (model_name, dtype, quantization, max_model_len, gpu_memory_utilization, self.enforce_eager)
+        if engine_key != self.model_key:
             if is_verbose():
                 print(
-                    f"[Worker {self.id}] loading model for op={op.id}: {model_name}",
+                    f"[Worker {self.id}] loading model for op={op.id}: {model_name} "
+                    f"max_model_len={max_model_len} gpu_memory_utilization={gpu_memory_utilization}",
                     flush=True,
                 )
             if self.llm is not None:
@@ -90,22 +102,23 @@ class vLLMWorker:
             self.tokenizer = None
             empty_device_cache(self.backend)
             llm_kwargs: Dict[str, Any] = {
-                "dtype": str(getattr(cfg, "dtype", "bfloat16")),
-                "quantization": getattr(cfg, "quantization", None),
-                "max_model_len": getattr(cfg, "max_model_len", None),
+                "dtype": dtype,
+                "quantization": quantization,
+                "max_model_len": max_model_len,
                 "enforce_eager": self.enforce_eager,
             }
-            gpu_memory_utilization = os.environ.get("MFE_GPU_MEMORY_UTILIZATION") or getattr(
-                cfg, "gpu_memory_utilization", None
-            )
             if gpu_memory_utilization is not None:
-                llm_kwargs["gpu_memory_utilization"] = float(gpu_memory_utilization)
+                llm_kwargs["gpu_memory_utilization"] = gpu_memory_utilization
             self.llm = LLM(model_name, **llm_kwargs)
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
             self.model_name = model_name
-            self.model_key = model_name
+            self.model_key = engine_key
         elif is_verbose():
-            print(f"[Worker {self.id}] reuse model for op={op.id}: {model_name}", flush=True)
+            print(
+                f"[Worker {self.id}] reuse model for op={op.id}: {model_name} "
+                f"max_model_len={max_model_len} gpu_memory_utilization={gpu_memory_utilization}",
+                flush=True,
+            )
         self.prefix = (getattr(cfg, "system_prompt", None) or "").strip()
         self.common_message: str = (getattr(cfg, "common_message", "") or "").strip()
 

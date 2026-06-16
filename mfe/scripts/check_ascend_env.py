@@ -120,6 +120,7 @@ def main() -> None:
             "MFE_MODEL_PATH",
             "MFE_DATA_DIR",
             "MFE_OFFLINE",
+            "MFE_MAX_MODEL_LEN",
             "MFE_GPU_MEMORY_UTILIZATION",
             "ASCEND_HOME_PATH",
             "ASCEND_RT_VISIBLE_DEVICES",

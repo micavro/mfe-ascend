@@ -84,7 +84,19 @@ vLLM 的显存使用比例可通过环境变量临时覆盖：
 export MFE_GPU_MEMORY_UTILIZATION=0.95
 ```
 
-也可以写进 YAML 的 op 配置里：
+如果 Llama-3.1 这类长上下文模型报 KV cache 不够，最方便的是运行时限制上下文长度：
+
+```bash
+python -m mfe.scripts.client --dataset gsm8k --max-model-len 4096 ...
+```
+
+或者用环境变量对所有 op 统一生效：
+
+```bash
+export MFE_MAX_MODEL_LEN=4096
+```
+
+也可以写进 YAML 的 op 配置里，适合固定模板参数：
 
 ```yaml
 max_model_len: 4096
