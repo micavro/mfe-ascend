@@ -72,12 +72,6 @@ export MFE_DATA_DIR=$PWD/data
 python -m mfe.scripts.client --dataset gsm8k --data-dir "$MFE_DATA_DIR" -n 5 --test-worker --worker-delay 0
 ```
 
-调度器会把同一个 op 上已经 ready 的请求合成一个 batch 交给 vLLM。显存紧张时可以用 `MFE_MAX_BATCH_SIZE` 限制每次合批大小：
-
-```bash
-export MFE_MAX_BATCH_SIZE=4
-```
-
 vLLM 的显存使用比例可通过环境变量临时覆盖：
 
 ```bash

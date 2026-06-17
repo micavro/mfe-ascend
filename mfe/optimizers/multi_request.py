@@ -7,7 +7,6 @@ import queue
 import threading
 import time
 import uuid
-import math
 import multiprocessing as mp
 from logging import getLogger
 from typing import Dict, List, Optional, Set, Tuple, Any
@@ -89,7 +88,7 @@ class MultiRequestOptimizer:
             proc.start()
 
         self.requests: Dict[str, Query] = {}
-        self._inflight: List[Optional[Tuple[List[str], Operator]]] = [None] * self.device_cnt
+        self._inflight: List[Optional[Tuple[str, Operator]]] = [None] * self.device_cnt
         self._inflight_tasks: Set[Tuple[str, str]] = set()
         self._running = True
         self._scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
@@ -211,34 +210,6 @@ class MultiRequestOptimizer:
         history = "".join(q.op_output.get(inp.id, "") for inp in op.input_ops)
         return prompt + history
 
-    def _batch_limit(self, op: Operator, available: int) -> int:
-        env_limit = os.environ.get("MFE_MAX_BATCH_SIZE")
-        raw_limit = env_limit if env_limit else getattr(op.model_config, "max_batch_size", None)
-        if raw_limit is None:
-            return available
-        try:
-            value = float(raw_limit)
-        except (TypeError, ValueError):
-            return available
-        if math.isinf(value):
-            return available
-        return max(1, min(available, int(value)))
-
-    def _select_batch(self, ready: List[Tuple[str, Operator]]) -> List[Tuple[str, Operator]]:
-        groups: Dict[int, List[Tuple[str, Operator]]] = {}
-        order: List[int] = []
-        for item in ready:
-            _, op = item
-            key = id(op)
-            if key not in groups:
-                groups[key] = []
-                order.append(key)
-            groups[key].append(item)
-        best_key = max(order, key=lambda key: len(groups[key]))
-        group = groups[best_key]
-        _, op = group[0]
-        return group[: self._batch_limit(op, len(group))]
-
     def _scheduler_loop(self) -> None:
         while self._running:
             for i in range(self.device_cnt):
@@ -248,21 +219,19 @@ class MultiRequestOptimizer:
                     msg = self.result_queues[i].get(timeout=0.1)
                 except queue.Empty:
                     continue
-                uids, op = self._inflight[i]
+                uid, op = self._inflight[i]
                 self._inflight[i] = None
                 if op:
-                    for uid in uids:
-                        self._inflight_tasks.discard((uid, op.id))
+                    self._inflight_tasks.discard((uid, op.id))
                 if isinstance(msg, dict) and msg.get("command") == "execute":
                     result = msg.get("result", {})
                     op_name = result.get("op_name") or result.get("node_name")
-                    if is_verbose() and op_name and uids:
-                        print(f"[OPT] <- Worker {i} op_name={op_name} batch={len(uids)} query_ids={uids} t={time.perf_counter():.1f}", flush=True)
-                    if op_name and uids:
+                    if is_verbose() and op_name and uid:
+                        print(f"[OPT] <- Worker {i} op_name={op_name} query_ids=[{uid}] t={time.perf_counter():.1f}", flush=True)
+                    if op_name and uid:
                         with self._lock:
                             for rec in result.get("item", []):
-                                rec_uid = rec.get("id")
-                                q = self.requests.get(rec_uid)
+                                q = self.requests.get(rec.get("id"))
                                 if q:
                                     q.op_output[op_name] = rec["output"]
                                     q.step += 1
@@ -273,15 +242,14 @@ class MultiRequestOptimizer:
                     if not isinstance(err, dict):
                         err = {"error_type": "WorkerError", "error_message": str(err)}
                     with self._lock:
-                        for uid in uids:
-                            q = self.requests.get(uid)
-                            if q:
-                                q.status = "error"
-                                q.error_type = err.get("error_type", "WorkerError")
-                                q.error_message = err.get("error_message", "worker failed")
-                                q.failed_op = err.get("op_name") or getattr(op, "id", None)
-                                q.worker_id = err.get("worker_id", i)
-                                q.worker_assignments[getattr(op, "id", "?")] = i
+                        q = self.requests.get(uid)
+                        if q:
+                            q.status = "error"
+                            q.error_type = err.get("error_type", "WorkerError")
+                            q.error_message = err.get("error_message", "worker failed")
+                            q.failed_op = err.get("op_name") or getattr(op, "id", None)
+                            q.worker_id = err.get("worker_id", i)
+                            q.worker_assignments[getattr(op, "id", "?")] = i
                     if is_verbose():
                         print(f"[OPT] !! Worker {i} op={getattr(op, 'id', '?')} error={err.get('error_message')}", flush=True)
 
@@ -291,26 +259,22 @@ class MultiRequestOptimizer:
                 ready = self._get_ready_tasks()
                 if not ready:
                     break
-                batch = self._select_batch(ready)
-                uids = [uid for uid, _ in batch]
-                op = batch[0][1]
-                prompts = [self._build_prompt(uid, op) for uid in uids]
-                exe = ExecuteInfo(op=op, query_ids=uids, prompts=prompts)
+                uid, op = ready[0]
+                prompt = self._build_prompt(uid, op)
+                exe = ExecuteInfo(op=op, query_ids=[uid], prompts=[prompt])
                 if is_verbose() and not op.input_ops:
-                    ops_dict, _, _ = self._get_dag(self.requests[uids[0]].template)
-                    print(f"[OPT] query id={uids[0][:8]} template={self.requests[uids[0]].template} DAG_ops={list(ops_dict.keys())}", flush=True)
+                    ops_dict, _, _ = self._get_dag(self.requests[uid].template)
+                    print(f"[OPT] query id={uid[:8]} template={self.requests[uid].template} DAG_ops={list(ops_dict.keys())}", flush=True)
                 self.cmd_queues[i].put(("execute", (exe,)))
-                self._inflight[i] = (uids, op)
-                for uid in uids:
-                    self._inflight_tasks.add((uid, op.id))
+                self._inflight[i] = (uid, op)
+                self._inflight_tasks.add((uid, op.id))
                 with self._lock:
-                    for uid in uids:
-                        q = self.requests.get(uid)
-                        if q:
-                            q.status = "running"
-                            q.worker_assignments[op.id] = i
+                    q = self.requests.get(uid)
+                    if q:
+                        q.status = "running"
+                        q.worker_assignments[op.id] = i
                 if is_verbose():
-                    print(f"[OPT] -> Worker {i} op={op.id} batch={len(uids)} query_ids={uids} t={time.perf_counter():.1f}", flush=True)
+                    print(f"[OPT] -> Worker {i} op={op.id} query_ids=[{uid}] t={time.perf_counter():.1f}", flush=True)
 
             time.sleep(0.01)
 

@@ -151,19 +151,6 @@ class vLLMWorker:
                 inputs.append(f"{header}\n\n{q.prompt}" if header else q.prompt)
 
         outputs = self.llm.generate(inputs, self.sampling_params)  # type: ignore[arg-type]
-        generate_time = time.perf_counter() - prefill_start
-        if is_verbose():
-            token_counts = [
-                len(output.outputs[0].token_ids)
-                if output.outputs and hasattr(output.outputs[0], "token_ids")
-                else None
-                for output in outputs
-            ]
-            print(
-                f"[Worker {self.id}] generated op={self.op_name} batch={len(inputs)} "
-                f"elapsed={generate_time:.3f}s tokens={token_counts}",
-                flush=True,
-            )
         results: List[Dict[str, Any]] = []
         for i, output in enumerate(outputs):
             gen_text = output.outputs[0].text if output.outputs else ""
@@ -173,6 +160,7 @@ class vLLMWorker:
                 full_text = "".join([m.get("content", "") for m in inputs[i]]) + gen_text
             results.append({"id": queries[i].id, "output": full_text, "benchmark": (prefill_start, time.perf_counter())})
 
+        generate_time = time.perf_counter() - prefill_start
         if self.is_duplicate:
             benchmark = {"init_time": 0.0, "prefill_time": 0.0, "generate_time": 0.0}
         else:
