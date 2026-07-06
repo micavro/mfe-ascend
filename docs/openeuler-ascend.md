@@ -74,7 +74,7 @@ python -m mfe.scripts.client --dataset gsm8k -n 5 --yaml adv_reason_3.yaml --tes
 
 ## 代码迁移点
 
-- `mfe.util` 负责 `ascend/cuda/auto` 后端选择、设备枚举和 worker 设备绑定。
+- `mfe.util` 负责 `ascend/cuda` 后端选择、设备枚举和 worker 设备绑定。
 - `mfe.optimizers.multi_request.MultiRequestOptimizer` 不再直接调用 `torch.cuda.device_count()`。
 - `mfe.workers.worker_v.vLLMWorker` 在导入 vLLM 前设置 `ASCEND_RT_VISIBLE_DEVICES`、`VLLM_TARGET_DEVICE=npu` 和 `VLLM_WORKER_MULTIPROC_METHOD=spawn`。
 - 项目已整理为正常包结构：源码位于 `mfe/`，命令使用 `python -m mfe.scripts...`。

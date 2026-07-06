@@ -93,7 +93,7 @@ def main() -> None:
     p.add_argument("--model-path", default=None, help="本地模型目录；也可用 MFE_MODEL_PATH")
     p.add_argument("--data-dir", default=None, help="数据目录；也可用 MFE_DATA_DIR")
     p.add_argument("--device-ids", default=None, help="设备 ID，如 0 或 0,1；也可用 MFE_DEVICE_IDS")
-    p.add_argument("--accelerator", default=None, choices=("ascend", "cuda", "auto"), help="推理后端")
+    p.add_argument("--accelerator", default=None, choices=("ascend", "cuda"), help="推理后端")
     p.add_argument("--offline", action="store_true", help="启用离线模式环境变量")
     args = p.parse_args()
 

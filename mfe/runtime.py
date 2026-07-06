@@ -29,6 +29,13 @@ def env_or_default(name: str, default: str | None = None) -> str | None:
     return value
 
 
+def resolve_accelerator(accelerator: str | None = None) -> str:
+    value = (accelerator or os.environ.get("MFE_ACCELERATOR", "ascend")).strip().lower()
+    if value not in ("ascend", "cuda"):
+        raise ValueError("accelerator must be one of: ascend, cuda")
+    return value
+
+
 def apply_offline_env(enabled: bool) -> None:
     if not enabled:
         return
@@ -38,7 +45,7 @@ def apply_offline_env(enabled: bool) -> None:
 
 
 def apply_device_env(device_ids: str | None, accelerator: str | None = None) -> None:
-    backend = (accelerator or os.environ.get("MFE_ACCELERATOR", "ascend")).lower()
+    backend = resolve_accelerator(accelerator)
     if backend == "ascend":
         os.environ.setdefault("VLLM_TARGET_DEVICE", "npu")
         os.environ.setdefault("VLLM_USE_V1", "1")
@@ -120,7 +127,8 @@ class RuntimeConfig:
         )
 
     def apply(self) -> None:
-        os.environ["MFE_ACCELERATOR"] = self.accelerator
+        resolved_accelerator = resolve_accelerator(self.accelerator)
+        os.environ["MFE_ACCELERATOR"] = resolved_accelerator
         if self.model_path:
             os.environ["MFE_MODEL_PATH"] = self.model_path
         os.environ["MFE_DATA_DIR"] = self.data_dir
@@ -128,17 +136,19 @@ class RuntimeConfig:
             os.environ["MFE_OUTPUT_DIR"] = self.output_dir
         if self.offline:
             os.environ["MFE_OFFLINE"] = "1"
-        apply_device_env(self.device_ids, self.accelerator)
+        apply_device_env(self.device_ids, resolved_accelerator)
         apply_offline_env(self.offline)
 
 
 def collect_run_info(config: RuntimeConfig | None = None, cwd: str | None = None) -> dict[str, Any]:
     config = config or RuntimeConfig.from_values(project_root=cwd)
+    resolved_accelerator = resolve_accelerator(config.accelerator)
     return {
         "git_commit": git_commit(cwd),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
-        "accelerator": config.accelerator,
+        "accelerator": resolved_accelerator,
+        "requested_accelerator": config.accelerator,
         "device_ids": config.device_ids,
         "model_path": config.model_path,
         "data_dir": config.data_dir,

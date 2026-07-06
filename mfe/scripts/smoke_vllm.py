@@ -20,7 +20,7 @@ def main() -> None:
     p.add_argument("--dtype", default="bfloat16")
     p.add_argument("--gpu-memory-utilization", type=float, default=None)
     p.add_argument("--device-ids", default=None, help="设备 ID，如 0；也可用 MFE_DEVICE_IDS")
-    p.add_argument("--accelerator", default="ascend", choices=("ascend", "cuda", "auto"))
+    p.add_argument("--accelerator", default="ascend", choices=("ascend", "cuda"))
     p.add_argument("--offline", action="store_true")
     args = p.parse_args()
 

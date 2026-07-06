@@ -2,28 +2,17 @@
 
 from __future__ import annotations
 
-import importlib.util
 import os
-import shutil
 from typing import Iterable, Literal
+
+from mfe.runtime import resolve_accelerator
 
 AcceleratorBackend = Literal["ascend", "cuda"]
 
 
-def _module_available(name: str) -> bool:
-    return importlib.util.find_spec(name) is not None
-
-
 def get_accelerator_backend() -> AcceleratorBackend:
     """返回当前推理后端。mfe-ascend 默认使用 Ascend，也可通过 MFE_ACCELERATOR 覆盖。"""
-    value = os.environ.get("MFE_ACCELERATOR", "ascend").strip().lower()
-    if value == "auto":
-        if _module_available("torch_npu") or shutil.which("npu-smi"):
-            return "ascend"
-        return "cuda"
-    if value not in ("ascend", "cuda"):
-        raise ValueError("MFE_ACCELERATOR must be one of: ascend, cuda, auto")
-    return value  # type: ignore[return-value]
+    return resolve_accelerator()  # type: ignore[return-value]
 
 
 def _parse_visible_ids(names: Iterable[str]) -> list[int] | None:
