@@ -10,15 +10,92 @@ MFE Ascend 是基于 `micavro/mfe` 的昇腾迁移版本。它保留原来的 YA
 - Worker 在导入 vLLM 前设置 `ASCEND_RT_VISIBLE_DEVICES`、`NPU_VISIBLE_DEVICES`、`VLLM_TARGET_DEVICE=npu`、`VLLM_WORKER_MULTIPROC_METHOD=spawn`。
 - 默认不安装或覆盖容器内的 `torch`、`torch-npu`、`vllm`、`vllm-ascend`；旧版组合记录在 `constraints/`。
 
-## SAI-LP 调度器
+## 统一运行方式
 
-默认调度器仍保持原来的 eager ready-task 行为。需要测试 SAI-LP/SAIL 风格的 admission-time workflow 调度时，设置：
+推荐使用 `deploy/run_unified.sh` 作为 A800/CUDA 和 Ascend/NPU 的统一入口。profile 只决定后端类型；卡数和卡号由运行参数指定。
+
+Ascend 8 卡环境示例：
+
+```bash
+bash deploy/run_unified.sh company-ascend \
+  --mode check \
+  --model-path /data/mfe/models/Qwen3-0.6B \
+  --device-ids 0,1,2,3,4,5,6,7 \
+  --expected-device-count 8 \
+  --offline
+
+bash deploy/run_unified.sh company-ascend \
+  --model-path /data/mfe/models/Qwen3-0.6B \
+  --device-ids 0,1,2,3,4,5,6,7 \
+  --expected-device-count 8 \
+  --dataset gsm8k \
+  --yaml adv_reason_3.yaml \
+  --num 20 \
+  --offline
+```
+
+A800 10 卡环境示例：
+
+```bash
+bash deploy/run_unified.sh lab-a800 \
+  --model-path /data/mfe/models/Qwen3-0.6B \
+  --device-ids 0,1,2,3,4,5,6,7,8,9 \
+  --expected-device-count 10 \
+  --dataset gsm8k \
+  --yaml adv_reason_3.yaml \
+  --num 20 \
+  --offline
+```
+
+在 Ascend Docker 里，`--device-ids` 只选择容器内 MFE 可见的逻辑设备；宿主机上的 `/dev/davinci*` 仍然要先通过 Docker 参数暴露给容器。真实推理前建议先跑：
+
+```bash
+bash deploy/run_unified.sh company-ascend \
+  --mode smoke \
+  --model-path /data/mfe/models/Qwen3-0.6B \
+  --device-ids 0 \
+  --offline
+```
+
+无真实卡或只验证调度流程时：
+
+```bash
+bash deploy/run_unified.sh custom \
+  --accelerator ascend \
+  --mode test-worker \
+  --dataset gsm8k \
+  --yaml adv_reason_3.yaml \
+  --num 1 \
+  --skip-install
+```
+
+## 调度方案
+
+当前代码里有两个可运行的调度方案，调度单位都是 `(query, operator)`，一个 `Operator` 仍对应一次 vLLM 调用；派发仍是单 query：`ExecuteInfo(query_ids=[uid])`，没有启用 query-batch。
+
+1. `eager`：默认方案。调度器每轮收集 ready `(query, operator)`，按 ready list 顺序把第一个任务派给空闲 worker。它是当前 FCFS/ready-task baseline，适合做稳定基线。
+2. `sailp`：SAI-LP/SAIL 风格的 admission-time workflow scheduler。提交 query 时根据 DAG、worker 数、可选 `reuse_from`/`reuse_group`/`eligible_devices`/`sailp` cost hints 生成 `schedule_plan`，运行时优先按计划 worker/timeline 派发 ready op。
+
+启用 SAI-LP：
 
 ```bash
 export MFE_SCHEDULER=sailp
 ```
 
-详细配置、YAML 元数据和限制见 [docs/sailp.md](docs/sailp.md)。
+也可以在单次运行前加环境变量：
+
+```bash
+MFE_SCHEDULER=sailp bash deploy/run_unified.sh company-ascend \
+  --model-path /data/mfe/models/Qwen3-0.6B \
+  --device-ids 0,1,2,3,4,5,6,7 \
+  --expected-device-count 8 \
+  --dataset gsm8k \
+  --yaml sailp_example.yaml \
+  --num 20 \
+  --offline
+```
+
+`sailp` 不直接接管 vLLM KV cache，也不实现远程 KV 迁移；它只是通过 placement/order 偏向状态亲和。`MFE_ENABLE_PREFIX_CACHING=1` 只在当前 vLLM/vLLM Ascend 版本支持 automatic prefix caching 时才建议打开。详细配置、YAML 元数据和限制见 [docs/sailp.md](docs/sailp.md)。
 
 ## 目录结构
 
