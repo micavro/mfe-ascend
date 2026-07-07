@@ -19,8 +19,13 @@ Options:
   --data-dir PATH
   --output-dir PATH
   --dataset NAME              default: gsm8k
+  --questions-file PATH       run a JSONL experiment workload instead of one parquet dataset
   --yaml FILE                 default: adv_reason_3.yaml
   --num N                     default: 20
+  --scheduler fcfs|sjf|eager  default: current MFE_SCHEDULER or fcfs
+  --output-length short|medium|long
+  --repeat N                  experiment repeats, default: 1
+  --send-interval SECONDS
   --templates-dir PATH        default: templates
   --max-model-len N
   --gpu-memory-utilization F
@@ -46,8 +51,13 @@ MODEL_PATH="${MFE_MODEL_PATH:-}"
 DATA_DIR="${MFE_DATA_DIR:-}"
 OUTPUT_DIR="${MFE_OUTPUT_DIR:-}"
 DATASET="gsm8k"
+QUESTIONS_FILE=""
 YAML_FILE="adv_reason_3.yaml"
 NUM="20"
+SCHEDULER="${MFE_SCHEDULER:-fcfs}"
+OUTPUT_LENGTH="medium"
+REPEAT="1"
+SEND_INTERVAL="0"
 TEMPLATES_DIR="templates"
 MAX_MODEL_LEN="${MFE_MAX_MODEL_LEN:-}"
 GPU_MEMORY_UTILIZATION="${MFE_GPU_MEMORY_UTILIZATION:-}"
@@ -106,12 +116,32 @@ while [[ $# -gt 0 ]]; do
       DATASET="$2"
       shift 2
       ;;
+    --questions-file)
+      QUESTIONS_FILE="$2"
+      shift 2
+      ;;
     --yaml)
       YAML_FILE="$2"
       shift 2
       ;;
     --num)
       NUM="$2"
+      shift 2
+      ;;
+    --scheduler)
+      SCHEDULER="$2"
+      shift 2
+      ;;
+    --output-length)
+      OUTPUT_LENGTH="$2"
+      shift 2
+      ;;
+    --repeat)
+      REPEAT="$2"
+      shift 2
+      ;;
+    --send-interval)
+      SEND_INTERVAL="$2"
       shift 2
       ;;
     --templates-dir)
@@ -193,6 +223,7 @@ fi
 if [[ -n "$GPU_MEMORY_UTILIZATION" ]]; then
   export MFE_GPU_MEMORY_UTILIZATION="$GPU_MEMORY_UTILIZATION"
 fi
+export MFE_SCHEDULER="$SCHEDULER"
 if [[ "$OFFLINE" == "1" || "$OFFLINE" == "true" ]]; then
   export MFE_OFFLINE=1
 fi
@@ -202,7 +233,10 @@ if [[ "$INSTALL" == "1" ]]; then
 fi
 
 if [[ "$MODE" != "test-worker" ]]; then
-  CHECK_ARGS=(--accelerator "$ACCELERATOR" --data-dir "$DATA_DIR" --require-data-dir --require-gsm8k --require-homogeneous)
+  CHECK_ARGS=(--accelerator "$ACCELERATOR" --data-dir "$DATA_DIR" --require-data-dir --require-homogeneous)
+  if [[ -z "$QUESTIONS_FILE" ]]; then
+    CHECK_ARGS+=(--require-gsm8k)
+  fi
   if [[ -n "$EXPECTED_DEVICE_COUNT" ]]; then
     CHECK_ARGS+=(--expected-device-count "$EXPECTED_DEVICE_COUNT")
   fi
@@ -244,24 +278,50 @@ if [[ "$MODE" == "smoke" ]]; then
   exit 0
 fi
 
-CLIENT_ARGS=(--dataset "$DATASET" --yaml "$YAML_FILE" -n "$NUM" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR")
-if [[ -n "$MODEL_PATH" ]]; then
-  CLIENT_ARGS+=(--model-path "$MODEL_PATH")
-fi
-if [[ -n "$OUTPUT_DIR" ]]; then
-  CLIENT_ARGS+=(--output-dir "$OUTPUT_DIR")
-fi
-if [[ -n "$DEVICE_IDS" ]]; then
-  CLIENT_ARGS+=(--device-ids "$DEVICE_IDS")
-fi
-if [[ "$OFFLINE" == "1" || "$OFFLINE" == "true" ]]; then
-  CLIENT_ARGS+=(--offline)
-fi
-if [[ "$VERBOSE" == "1" ]]; then
-  CLIENT_ARGS+=(-v)
-fi
-if [[ "$MODE" == "test-worker" ]]; then
-  CLIENT_ARGS+=(--test-worker --worker-delay 0)
-fi
+if [[ -n "$QUESTIONS_FILE" ]]; then
+  EXP_ARGS=(--questions-file "$QUESTIONS_FILE" --scheduler "$SCHEDULER" --output-length "$OUTPUT_LENGTH" --repeat "$REPEAT" --send-interval "$SEND_INTERVAL" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR")
+  if [[ -n "$MODEL_PATH" ]]; then
+    EXP_ARGS+=(--model-path "$MODEL_PATH")
+  fi
+  if [[ -n "$OUTPUT_DIR" ]]; then
+    EXP_ARGS+=(--output-dir "$OUTPUT_DIR")
+  fi
+  if [[ -n "$DEVICE_IDS" ]]; then
+    EXP_ARGS+=(--device-ids "$DEVICE_IDS")
+  fi
+  if [[ -n "$EXPECTED_DEVICE_COUNT" ]]; then
+    EXP_ARGS+=(--device-count "$EXPECTED_DEVICE_COUNT")
+  fi
+  if [[ "$OFFLINE" == "1" || "$OFFLINE" == "true" ]]; then
+    EXP_ARGS+=(--offline)
+  fi
+  if [[ "$VERBOSE" == "1" ]]; then
+    EXP_ARGS+=(-v)
+  fi
+  if [[ "$MODE" == "test-worker" ]]; then
+    EXP_ARGS+=(--test-worker --worker-delay 0)
+  fi
+  python -m mfe.scripts.experiment_baselines "${EXP_ARGS[@]}"
+else
+  CLIENT_ARGS=(--dataset "$DATASET" --yaml "$YAML_FILE" -n "$NUM" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR")
+  if [[ -n "$MODEL_PATH" ]]; then
+    CLIENT_ARGS+=(--model-path "$MODEL_PATH")
+  fi
+  if [[ -n "$OUTPUT_DIR" ]]; then
+    CLIENT_ARGS+=(--output-dir "$OUTPUT_DIR")
+  fi
+  if [[ -n "$DEVICE_IDS" ]]; then
+    CLIENT_ARGS+=(--device-ids "$DEVICE_IDS")
+  fi
+  if [[ "$OFFLINE" == "1" || "$OFFLINE" == "true" ]]; then
+    CLIENT_ARGS+=(--offline)
+  fi
+  if [[ "$VERBOSE" == "1" ]]; then
+    CLIENT_ARGS+=(-v)
+  fi
+  if [[ "$MODE" == "test-worker" ]]; then
+    CLIENT_ARGS+=(--test-worker --worker-delay 0)
+  fi
 
-python -m mfe.scripts.client "${CLIENT_ARGS[@]}"
+  python -m mfe.scripts.client "${CLIENT_ARGS[@]}"
+fi

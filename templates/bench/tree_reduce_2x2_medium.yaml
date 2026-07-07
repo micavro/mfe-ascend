@@ -1,0 +1,51 @@
+start_ops: [split]
+end_ops: [final]
+ops:
+  split:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Split the problem into four evidence or reasoning leaves."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [leaf_1, leaf_2, leaf_3, leaf_4]
+  leaf_1:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Work on leaf 1."
+    max_tokens: 1024
+    input_ops: [split]
+    output_ops: [merge_left]
+  leaf_2:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Work on leaf 2."
+    max_tokens: 1024
+    input_ops: [split]
+    output_ops: [merge_left]
+  leaf_3:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Work on leaf 3."
+    max_tokens: 1024
+    input_ops: [split]
+    output_ops: [merge_right]
+  leaf_4:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Work on leaf 4."
+    max_tokens: 1024
+    input_ops: [split]
+    output_ops: [merge_right]
+  merge_left:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Merge leaves 1 and 2."
+    max_tokens: 1024
+    input_ops: [leaf_1, leaf_2]
+    output_ops: [final]
+  merge_right:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Merge leaves 3 and 4."
+    max_tokens: 1024
+    input_ops: [leaf_3, leaf_4]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Merge both partial results and return the final answer."
+    max_tokens: 1024
+    input_ops: [merge_left, merge_right]
+    output_ops: []

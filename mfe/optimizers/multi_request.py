@@ -107,6 +107,9 @@ class MultiRequestOptimizer:
         )
         self._sailp_strict = _env_bool("MFE_SAILP_STRICT", False)
         self._sailp_planner: Optional[SAILPScheduler] = None
+        self._scheduler_overhead_seconds = 0.0
+        self._scheduler_decisions = 0
+        self._ready_queue_samples: List[int] = []
         if self._sailp_enabled:
             self._sailp_planner = SAILPScheduler(num_executors=self.device_cnt, executor_ids=list(range(self.device_cnt)))
 
@@ -182,10 +185,11 @@ class MultiRequestOptimizer:
                 print(f"[OPT]   worker {wid}: {timeline}", flush=True)
         return plan
 
-    def submit(self, dag: str, input_text: str) -> str:
+    def submit(self, dag: str, input_text: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         uid = str(uuid.uuid4())
         tpl = dag if dag.endswith(".yaml") else f"{dag}.yaml"
-        q = Query(id=uid, prompt=input_text or "", template=tpl)
+        q = Query(id=uid, prompt=input_text or "", template=tpl, metadata=metadata)
+        q.scheduler_name = "sailp" if self._sailp_enabled else self._scheduler_name
         with self._lock:
             if self._sailp_enabled:
                 self._ensure_schedule_plan(q)
@@ -204,8 +208,10 @@ class MultiRequestOptimizer:
                     "op_output": dict(q.op_output),
                     "benchmark": {k: [float(t[0]), float(t[1])] for k, t in q.benchmark.items()},
                     "worker_assignments": dict(q.worker_assignments),
+                    "op_metrics": dict(q.op_metrics),
                     "schedule_plan": q.schedule_plan.to_dict() if q.schedule_plan is not None else None,
                     "scheduler": getattr(q, "scheduler_name", "eager"),
+                    "scheduler_metrics": self._scheduler_snapshot(),
                     "total_answer_time": None,
                     "arrive_time": q.create_time,
                     "done_time": None,
@@ -225,8 +231,10 @@ class MultiRequestOptimizer:
                     "op_output": {},
                     "benchmark": {},
                     "worker_assignments": dict(q.worker_assignments),
+                    "op_metrics": dict(q.op_metrics),
                     "schedule_plan": None,
-                    "scheduler": "sailp" if self._sailp_enabled else "eager",
+                    "scheduler": "sailp" if self._sailp_enabled else self._scheduler_name,
+                    "scheduler_metrics": self._scheduler_snapshot(),
                     "total_answer_time": None,
                     "arrive_time": q.create_time,
                     "done_time": None,
@@ -250,12 +258,25 @@ class MultiRequestOptimizer:
                 "op_output": dict(q.op_output),
                 "benchmark": {k: [float(t[0]), float(t[1])] for k, t in q.benchmark.items()},
                 "worker_assignments": dict(q.worker_assignments),
+                "op_metrics": dict(q.op_metrics),
                 "schedule_plan": q.schedule_plan.to_dict() if q.schedule_plan is not None else None,
                 "scheduler": getattr(q, "scheduler_name", "eager"),
+                "scheduler_metrics": self._scheduler_snapshot(),
                 "total_answer_time": (done_time - q.create_time if done_time is not None else None),
                 "arrive_time": q.create_time,
                 "done_time": done_time,
             }
+
+    def _scheduler_snapshot(self) -> Dict[str, Any]:
+        samples = list(self._ready_queue_samples)
+        return {
+            "scheduler": "sailp" if self._sailp_enabled else self._scheduler_name,
+            "overhead_seconds": float(self._scheduler_overhead_seconds),
+            "decisions": int(self._scheduler_decisions),
+            "ready_queue_samples": len(samples),
+            "ready_queue_avg": (sum(samples) / len(samples) if samples else 0.0),
+            "ready_queue_peak": (max(samples) if samples else 0),
+        }
 
     def _is_query_complete(self, q: Query) -> bool:
         try:
@@ -286,6 +307,22 @@ class MultiRequestOptimizer:
                     continue
                 for op in self._ready_ops_for_query(uid, q):
                     ready.append((uid, op))
+        return self._order_ready_tasks(ready)
+
+    def _order_ready_tasks(self, ready: List[Tuple[str, Operator]]) -> List[Tuple[str, Operator]]:
+        if self._sailp_enabled:
+            return ready
+        if self._scheduler_name in {"sjf", "shortest-job-first", "short-job-first"}:
+            with self._lock:
+                return sorted(
+                    ready,
+                    key=lambda item: (
+                        int(getattr(self.requests.get(item[0]), "input_len_est_tokens", 0) or 0),
+                        float(getattr(self.requests.get(item[0]), "create_time", 0.0) or 0.0),
+                        item[0],
+                        item[1].id,
+                    ),
+                )
         return ready
 
     def _get_ready_tasks_for_worker(self, worker_id: int) -> List[Tuple[str, Operator]]:
@@ -342,6 +379,8 @@ class MultiRequestOptimizer:
                             q.step += 1
                             q.status = "running"
                             q.benchmark[op_name] = rec["benchmark"]
+                            if isinstance(rec.get("metrics"), dict):
+                                q.op_metrics[op_name] = rec["metrics"]
         elif isinstance(msg, dict) and msg.get("command") == "error":
             err = msg.get("result", {})
             if not isinstance(err, dict):
@@ -411,7 +450,11 @@ class MultiRequestOptimizer:
             for i in range(self.device_cnt):
                 if self._inflight[i] is not None:
                     continue
+                sched_start = time.perf_counter()
                 ready = self._get_ready_tasks_for_worker(i)
+                self._scheduler_overhead_seconds += time.perf_counter() - sched_start
+                self._scheduler_decisions += 1
+                self._ready_queue_samples.append(len(ready))
                 if not ready:
                     continue
                 uid, op = ready[0]

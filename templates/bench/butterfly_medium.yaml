@@ -1,0 +1,63 @@
+start_ops: [root]
+end_ops: [final]
+ops:
+  root:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Initialize four reasoning lanes."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [a0, b0, c0, d0]
+  a0:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Lane A first pass."
+    max_tokens: 1024
+    input_ops: [root]
+    output_ops: [ab1, ac1]
+  b0:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Lane B first pass."
+    max_tokens: 1024
+    input_ops: [root]
+    output_ops: [ab1, bd1]
+  c0:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Lane C first pass."
+    max_tokens: 1024
+    input_ops: [root]
+    output_ops: [ac1, cd1]
+  d0:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Lane D first pass."
+    max_tokens: 1024
+    input_ops: [root]
+    output_ops: [bd1, cd1]
+  ab1:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Cross-merge A and B."
+    max_tokens: 1024
+    input_ops: [a0, b0]
+    output_ops: [final]
+  ac1:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Cross-merge A and C."
+    max_tokens: 1024
+    input_ops: [a0, c0]
+    output_ops: [final]
+  bd1:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Cross-merge B and D."
+    max_tokens: 1024
+    input_ops: [b0, d0]
+    output_ops: [final]
+  cd1:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Cross-merge C and D."
+    max_tokens: 1024
+    input_ops: [c0, d0]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Synthesize all cross-merge results."
+    max_tokens: 1024
+    input_ops: [ab1, ac1, bd1, cd1]
+    output_ops: []

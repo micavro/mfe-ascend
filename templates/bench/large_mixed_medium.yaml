@@ -1,0 +1,75 @@
+start_ops: [context]
+end_ops: [final]
+ops:
+  context:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Build a shared representation of the user question."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [plan, evidence_a, evidence_b, evidence_c, pro, con]
+  plan:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Create a solution plan."
+    max_tokens: 1024
+    input_ops: [context]
+    output_ops: [draft]
+  evidence_a:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Produce evidence track A."
+    max_tokens: 1024
+    input_ops: [context]
+    output_ops: [evidence_merge]
+  evidence_b:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Produce evidence track B."
+    max_tokens: 1024
+    input_ops: [context]
+    output_ops: [evidence_merge]
+  evidence_c:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Produce evidence track C."
+    max_tokens: 1024
+    input_ops: [context]
+    output_ops: [evidence_merge]
+  pro:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue for the most likely answer."
+    max_tokens: 1024
+    input_ops: [context]
+    output_ops: [debate_judge]
+  con:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue against the most likely answer and identify risks."
+    max_tokens: 1024
+    input_ops: [context]
+    output_ops: [debate_judge]
+  evidence_merge:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Merge evidence tracks A, B, and C."
+    max_tokens: 1024
+    input_ops: [evidence_a, evidence_b, evidence_c]
+    output_ops: [draft]
+  debate_judge:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Judge the pro and con arguments."
+    max_tokens: 1024
+    input_ops: [pro, con]
+    output_ops: [draft]
+  draft:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Draft an answer using the plan, evidence, and debate judgement."
+    max_tokens: 1024
+    input_ops: [plan, evidence_merge, debate_judge]
+    output_ops: [critic]
+  critic:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Critique the draft and point out corrections."
+    max_tokens: 1024
+    input_ops: [draft]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Return the final answer only."
+    max_tokens: 1024
+    input_ops: [critic]
+    output_ops: []

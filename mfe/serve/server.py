@@ -40,7 +40,7 @@ def run_server(
                 if is_verbose():
                     print(f"[SERVER] recv id={req_id[:8]} template={dag} prompt_len={len(input_text or '')}", flush=True)
                 try:
-                    uid = opt.submit(dag, input_text)
+                    uid = opt.submit(dag, input_text, metadata=req.get("metadata"))
                     if is_verbose():
                         print(f"[SERVER] submit ok uid={uid[:8]}...", flush=True)
                     response_queue.put({"req_id": req_id, "result": {"uid": uid}, "error": None})

@@ -49,6 +49,18 @@ DATASET_CONFIGS = {
         "text_key": "question",
         "answer_key": "answer",
     },
+    "strategyqa": {
+        "path": "ChilleD/StrategyQA",
+        "split": "test",
+        "text_key": "question",
+        "answer_key": "answer",
+    },
+    "mbpp": {
+        "path": "mbpp",
+        "split": "test",
+        "text_key": "prompt",
+        "answer_key": "code",
+    },
 }
 
 

@@ -101,7 +101,7 @@ def build_ops_from_config(
             system_prompt=spec.get("prompt"),
             temperature=spec.get("temperature", 0.7),
             top_p=spec.get("top_p", 0.9),
-            max_tokens=spec.get("max_tokens", 256),
+            max_tokens=int(os.environ.get("MFE_OUTPUT_MAX_TOKENS") or spec.get("max_tokens", 256)),
             max_batch_size=spec.get("max_batch_size", math.inf),
             dtype=spec.get("dtype", "bfloat16"),
             quantization=spec.get("quantization", None),

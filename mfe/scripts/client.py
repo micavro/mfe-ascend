@@ -23,7 +23,7 @@ from mfe.config import is_verbose, set_verbose
 from mfe.runtime import RuntimeConfig, collect_run_info
 from mfe.scripts.process_datasets import PROCESSORS
 
-DATASET_NAMES = ("drop", "gsm8k", "hotpotqa", "math")
+DATASET_NAMES = ("drop", "gsm8k", "hotpotqa", "math", "strategyqa", "mbpp")
 
 
 def load_questions_from_parquet(
@@ -41,6 +41,9 @@ def load_questions_from_parquet(
         yaml_name = f"{yaml_name}.yaml"
     for r in rows:
         r["yaml"] = yaml_name
+        q = str(r.get("question", "") or "")
+        r.setdefault("input_len_chars", len(q))
+        r.setdefault("input_len_est_tokens", max(1, (len(q) + 3) // 4) if q else 0)
     return rows
 
 
@@ -128,7 +131,7 @@ class Client:
                     self._pending[req_id]["result"] = msg
                     self._pending[req_id]["event"].set()
 
-    def submit(self, dag: str, input_text: str) -> str:
+    def submit(self, dag: str, input_text: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         req_id = str(uuid.uuid4())
         if is_verbose():
             prompt_preview = (input_text or "")[:50] + ("..." if len(input_text or "") > 50 else "")
@@ -136,7 +139,13 @@ class Client:
         ev = threading.Event()
         with self._lock:
             self._pending[req_id] = {"event": ev, "result": None}
-        self._req_q.put({"req_id": req_id, "command": "submit", "dag": dag, "input": input_text})
+        self._req_q.put({
+            "req_id": req_id,
+            "command": "submit",
+            "dag": dag,
+            "input": input_text,
+            "metadata": metadata or {},
+        })
         ev.wait(timeout=10.0)
         with self._lock:
             r = self._pending.pop(req_id, {}).get("result")
@@ -202,6 +211,7 @@ def _build_error_result(item: Dict[str, Any], uid: str, st: Dict[str, Any], subm
         "yaml": item.get("yaml", ""),
         "mfe_answer": "",
         "benchmark": st.get("benchmark") or {},
+        "op_metrics": st.get("op_metrics") or {},
         "op_durations": {},
         "run_time": 0.0,
         "end_op_name": None,
@@ -220,6 +230,8 @@ def _build_error_result(item: Dict[str, Any], uid: str, st: Dict[str, Any], subm
         "error_message": st.get("error_message"),
         "failed_op": st.get("failed_op"),
         "worker_id": st.get("worker_id"),
+        "scheduler": st.get("scheduler"),
+        "scheduler_metrics": st.get("scheduler_metrics"),
     }
     for k, v in item.items():
         if k not in out_item:
@@ -243,7 +255,7 @@ def run_data_test(
         if not yaml_name.endswith(".yaml"):
             yaml_name = f"{yaml_name}.yaml"
         submit_time = time.perf_counter()
-        uid = client.submit(yaml_name, q)
+        uid = client.submit(yaml_name, q, metadata=item)
         uids.append(uid)
         submit_times[uid] = submit_time
 
@@ -292,11 +304,13 @@ def run_data_test(
                         out_item[k] = v
                 out_item["mfe_answer"] = mfe_answer
                 out_item["benchmark"] = bench
+                out_item["op_metrics"] = st.get("op_metrics") or {}
                 out_item["op_durations"] = op_durations
                 out_item["run_time"] = run_time
                 out_item["end_op_name"] = end_op_name
                 out_item["worker_assignments"] = worker_assignments
                 out_item["scheduler"] = st.get("scheduler")
+                out_item["scheduler_metrics"] = st.get("scheduler_metrics")
                 out_item["schedule_plan"] = st.get("schedule_plan")
                 out_item["submit_time"] = submit_times.get(uid)
                 out_item["total_answer_time"] = st.get("total_answer_time")

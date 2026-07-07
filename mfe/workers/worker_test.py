@@ -32,7 +32,25 @@ class TestWorker:
         results: List[Dict[str, Any]] = []
         for qid, prompt in zip(exe_info.query_ids, exe_info.prompts):
             text = prompt if isinstance(prompt, str) else str(prompt)
-            results.append({"id": qid, "output": text, "benchmark": (start, time.perf_counter())})
+            input_tokens = max(1, (len(text) + 3) // 4) if text else 0
+            output_tokens = int(os.environ.get("MFE_TEST_OUTPUT_TOKENS", os.environ.get("MFE_OUTPUT_MAX_TOKENS", "0")) or 0)
+            if output_tokens <= 0:
+                output_tokens = input_tokens
+            results.append(
+                {
+                    "id": qid,
+                    "output": text,
+                    "benchmark": (start, time.perf_counter()),
+                    "metrics": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "total_tokens": input_tokens + output_tokens,
+                        "input_chars": len(text),
+                        "output_chars": len(text),
+                        "synthetic_tokens": True,
+                    },
+                }
+            )
         elapsed = time.perf_counter() - start
         benchmark = {"init_time": 0.0, "prefill_time": 0.0, "generate_time": 0.0} if is_duplicate else {"init_time": 0.0, "prefill_time": 0.0, "generate_time": elapsed}
         return {"item": results, "op_name": op_name, "benchmark": benchmark}

@@ -44,6 +44,13 @@ def _parse_bool(value: Any, default: Optional[bool] = None) -> Optional[bool]:
     return bool(value)
 
 
+def _safe_len(value: Any) -> int:
+    try:
+        return len(value) if value is not None else 0
+    except TypeError:
+        return 0
+
+
 class vLLMWorker:
     def __init__(self, id: int, physical_device_id: int, cmd_queue: Any, result_queue: Any) -> None:
         self.id = id
@@ -182,12 +189,34 @@ class vLLMWorker:
         outputs = self.llm.generate(inputs, self.sampling_params)  # type: ignore[arg-type]
         results: List[Dict[str, Any]] = []
         for i, output in enumerate(outputs):
+            item_start = prefill_start
+            item_end = time.perf_counter()
             gen_text = output.outputs[0].text if output.outputs else ""
             if isinstance(inputs[i], str):
                 full_text = inputs[i] + gen_text
             else:
                 full_text = "".join([m.get("content", "") for m in inputs[i]]) + gen_text
-            results.append({"id": queries[i].id, "output": full_text, "benchmark": (prefill_start, time.perf_counter())})
+            prompt_tokens = _safe_len(getattr(output, "prompt_token_ids", None))
+            output_tokens = _safe_len(getattr(output.outputs[0], "token_ids", None)) if output.outputs else 0
+            if prompt_tokens <= 0 and self.tokenizer is not None:
+                prompt_tokens = len(self.tokenizer.encode(inputs[i], add_special_tokens=False))
+            if output_tokens <= 0 and self.tokenizer is not None and gen_text:
+                output_tokens = len(self.tokenizer.encode(gen_text, add_special_tokens=False))
+            results.append(
+                {
+                    "id": queries[i].id,
+                    "output": full_text,
+                    "benchmark": (item_start, item_end),
+                    "metrics": {
+                        "input_tokens": int(prompt_tokens),
+                        "output_tokens": int(output_tokens),
+                        "total_tokens": int(prompt_tokens + output_tokens),
+                        "input_chars": len(inputs[i]) if isinstance(inputs[i], str) else len(str(inputs[i])),
+                        "output_chars": len(gen_text),
+                        "synthetic_tokens": False,
+                    },
+                }
+            )
 
         generate_time = time.perf_counter() - prefill_start
         if self.is_duplicate:

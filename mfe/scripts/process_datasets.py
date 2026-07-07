@@ -118,6 +118,60 @@ PROCESSORS = {
 }
 
 
+def process_strategyqa(data_dir: str, limit: int | None) -> List[Dict[str, Any]]:
+    import pandas as pd
+    path = os.path.join(data_dir, "strategyqa", "strategyqa.parquet")
+    if not os.path.isfile(path):
+        return []
+    df = pd.read_parquet(path)
+    out = []
+    for _, row in df.iterrows():
+        row_d = _to_json_safe(row.to_dict())
+        question = row_d.get("question", row_d.get("input", "")) or ""
+        answer = row_d.get("answer", row_d.get("target", row_d.get("label", "")))
+        facts = row_d.get("facts", row_d.get("decomposition", row_d.get("evidence", "")))
+        row_d["question_short"] = str(question).strip()
+        row_d["question"] = str(question).strip()
+        row_d["answer"] = answer
+        if facts not in (None, ""):
+            row_d["strategy_metadata"] = facts
+        out.append(row_d)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def process_mbpp(data_dir: str, limit: int | None) -> List[Dict[str, Any]]:
+    import pandas as pd
+    path = os.path.join(data_dir, "mbpp", "mbpp.parquet")
+    if not os.path.isfile(path):
+        return []
+    df = pd.read_parquet(path)
+    out = []
+    for _, row in df.iterrows():
+        row_d = _to_json_safe(row.to_dict())
+        prompt = row_d.get("prompt", row_d.get("text", row_d.get("question", ""))) or ""
+        tests = row_d.get("test_list", row_d.get("tests", row_d.get("challenge_test_list", [])))
+        if isinstance(tests, list) and tests:
+            test_text = "\n".join(str(x) for x in tests)
+            question = f"Write a Python function for the task below.\n\nTask:\n{prompt}\n\nTests:\n{test_text}"
+        else:
+            question = f"Write a Python function for the task below.\n\nTask:\n{prompt}"
+        row_d["question_short"] = str(prompt).strip()
+        row_d["question"] = question.strip()
+        row_d["answer"] = row_d.get("code", row_d.get("canonical_solution", ""))
+        out.append(row_d)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+PROCESSORS.update({
+    "strategyqa": process_strategyqa,
+    "mbpp": process_mbpp,
+})
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="将数据集处理为 client 可用的 questions.json")
     p.add_argument("--data-dir", default="data", help="数据目录（含 drop/hotpotqa/math/gsm8k）")

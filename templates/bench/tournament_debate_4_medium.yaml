@@ -1,0 +1,45 @@
+start_ops: [role_1, role_2, role_3, role_4]
+end_ops: [final]
+ops:
+  role_1:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue for answer candidate 1."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [semi_a]
+  role_2:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue for answer candidate 2."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [semi_a]
+  role_3:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue for answer candidate 3."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [semi_b]
+  role_4:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue for answer candidate 4."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [semi_b]
+  semi_a:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Judge roles 1 and 2 and keep the stronger argument."
+    max_tokens: 1024
+    input_ops: [role_1, role_2]
+    output_ops: [final]
+  semi_b:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Judge roles 3 and 4 and keep the stronger argument."
+    max_tokens: 1024
+    input_ops: [role_3, role_4]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Judge both semifinal arguments and return the final answer."
+    max_tokens: 1024
+    input_ops: [semi_a, semi_b]
+    output_ops: []

@@ -110,10 +110,13 @@ def _build_result_item(item: Dict[str, Any], uid: str, st: Dict[str, Any], submi
 
     out_item["mfe_answer"] = _extract_final_answer(st)
     out_item["benchmark"] = bench
+    out_item["op_metrics"] = st.get("op_metrics") or {}
     out_item["op_durations"] = op_durations
     out_item["run_time"] = sum(op_durations.values())
     out_item["end_op_name"] = end_op_name
     out_item["worker_assignments"] = st.get("worker_assignments") or {}
+    out_item["scheduler"] = st.get("scheduler")
+    out_item["scheduler_metrics"] = st.get("scheduler_metrics")
     out_item["submit_time"] = submit_time
     out_item["total_answer_time"] = st.get("total_answer_time")
     out_item["arrive_time"] = arrive_time
@@ -134,7 +137,7 @@ def run_serial_data_test(client: Client, questions: List[Dict[str, Any]]) -> Lis
         if not yaml_name.endswith(".yaml"):
             yaml_name = f"{yaml_name}.yaml"
         submit_time = time.perf_counter()
-        uid = client.submit(yaml_name, q)
+        uid = client.submit(yaml_name, q, metadata=item)
         while True:
             st = client.status(uid)
             if st and st.get("status") == "completed":

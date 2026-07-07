@@ -1,0 +1,27 @@
+start_ops: [step_1]
+end_ops: [final]
+ops:
+  step_1:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Solve the problem step by step. Focus on the first useful inference."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [step_2]
+  step_2:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Continue the reasoning from the previous step and make the intermediate result explicit."
+    max_tokens: 1024
+    input_ops: [step_1]
+    output_ops: [step_3]
+  step_3:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Check the intermediate reasoning and complete the solution."
+    max_tokens: 1024
+    input_ops: [step_2]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Return the final answer only."
+    max_tokens: 1024
+    input_ops: [step_3]
+    output_ops: []
