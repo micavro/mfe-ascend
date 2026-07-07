@@ -296,6 +296,8 @@ def run_data_test(
                 out_item["run_time"] = run_time
                 out_item["end_op_name"] = end_op_name
                 out_item["worker_assignments"] = worker_assignments
+                out_item["scheduler"] = st.get("scheduler")
+                out_item["schedule_plan"] = st.get("schedule_plan")
                 out_item["submit_time"] = submit_times.get(uid)
                 out_item["total_answer_time"] = st.get("total_answer_time")
                 out_item["arrive_time"] = arrive_time

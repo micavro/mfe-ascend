@@ -10,6 +10,16 @@ MFE Ascend 是基于 `micavro/mfe` 的昇腾迁移版本。它保留原来的 YA
 - Worker 在导入 vLLM 前设置 `ASCEND_RT_VISIBLE_DEVICES`、`NPU_VISIBLE_DEVICES`、`VLLM_TARGET_DEVICE=npu`、`VLLM_WORKER_MULTIPROC_METHOD=spawn`。
 - 默认不安装或覆盖容器内的 `torch`、`torch-npu`、`vllm`、`vllm-ascend`；旧版组合记录在 `constraints/`。
 
+## SAI-LP 调度器
+
+默认调度器仍保持原来的 eager ready-task 行为。需要测试 SAI-LP/SAIL 风格的 admission-time workflow 调度时，设置：
+
+```bash
+export MFE_SCHEDULER=sailp
+```
+
+详细配置、YAML 元数据和限制见 [docs/sailp.md](docs/sailp.md)。
+
 ## 目录结构
 
 ```text
