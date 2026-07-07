@@ -11,7 +11,7 @@ import random
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List
 
-from mfe.scripts.process_datasets import PROCESSORS
+from mfe.scripts.process_datasets import PROCESSORS, _to_json_safe
 
 
 DATASET_DAG_MAP: Dict[str, str] = {
@@ -36,6 +36,7 @@ DEFAULT_YAML_BY_FAMILY: Dict[str, str] = {
 SIZE_PRESETS = {
     "tiny": 1,
     "smoke": 5,
+    "first200": 200,
     "dev": 25,
     "full": 100,
 }
@@ -110,7 +111,7 @@ def write_jsonl(path: str, rows: Iterable[Dict[str, Any]]) -> int:
     count = 0
     with open(path, "w", encoding="utf-8") as f:
         for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+            f.write(json.dumps(_to_json_safe(row), ensure_ascii=False, sort_keys=True) + "\n")
             count += 1
     return count
 
@@ -224,7 +225,8 @@ def build(args: argparse.Namespace) -> None:
         dataset = dataset.lower()
         rows = load_dataset_rows(data_dir, dataset, load_limit)
         rows = [r for r in rows if str(r.get("question", "") or "").strip()]
-        rng.shuffle(rows)
+        if args.selection == "random":
+            rng.shuffle(rows)
         selected = rows[:per_dataset]
         records = [
             make_record(r, dataset=dataset, index=i, output_length=args.output_length)
@@ -263,6 +265,7 @@ def main() -> None:
     p.add_argument("--per-dataset", type=int, default=None)
     p.add_argument("--load-limit", type=int, default=None)
     p.add_argument("--output-length", choices=("short", "medium", "long"), default="medium")
+    p.add_argument("--selection", choices=("first", "random"), default="random", help="select first N rows or random N rows per dataset before global shuffle")
     p.add_argument("--seed", type=int, default=20260707)
     p.add_argument("--builtin-tiny", action="store_true", help="build a small built-in workload without external datasets")
     args = p.parse_args()
