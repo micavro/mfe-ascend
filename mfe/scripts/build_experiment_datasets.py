@@ -34,6 +34,7 @@ DEFAULT_YAML_BY_FAMILY: Dict[str, str] = {
 }
 
 SIZE_PRESETS = {
+    "tiny": 1,
     "smoke": 5,
     "dev": 25,
     "full": 100,
@@ -124,6 +125,92 @@ def read_jsonl(path: str) -> List[Dict[str, Any]]:
     return rows
 
 
+BUILTIN_TINY_ROWS: List[Dict[str, str]] = [
+    {
+        "dataset": "builtin_math",
+        "dag_family": "path_n",
+        "question": "A store sells 18 notebooks in the morning and 27 in the afternoon. If each notebook costs 3 dollars, what is the total revenue?",
+        "answer": "135",
+    },
+    {
+        "dataset": "builtin_math",
+        "dag_family": "unrolled_reflect_r",
+        "question": "Solve for x: 3x + 14 = 65. Return the value of x.",
+        "answer": "17",
+    },
+    {
+        "dataset": "builtin_reading",
+        "dag_family": "fork_join_k",
+        "question": "Passage: Mina tested three batteries. Battery A lasted 6 hours, Battery B lasted 9 hours, and Battery C lasted 7 hours. Question: Which battery lasted the longest and by how many hours more than Battery A?",
+        "answer": "Battery B, 3 hours more than Battery A.",
+    },
+    {
+        "dataset": "builtin_multihop",
+        "dag_family": "tree_reduce_kd",
+        "question": "Alice is Bob's sister. Bob is Carol's father. Carol has a brother named Dan. What is Alice's family relationship to Dan?",
+        "answer": "Alice is Dan's aunt.",
+    },
+    {
+        "dataset": "builtin_strategy",
+        "dag_family": "diamond",
+        "question": "Could a person carry a bicycle through a standard doorway without disassembling it? Explain briefly before the final answer.",
+        "answer": "Yes.",
+    },
+    {
+        "dataset": "builtin_code",
+        "dag_family": "plan_code_test",
+        "question": "Write a Python function add_even_numbers(nums) that returns the sum of all even integers in nums.",
+        "answer": "def add_even_numbers(nums): return sum(x for x in nums if x % 2 == 0)",
+    },
+    {
+        "dataset": "builtin_debate",
+        "dag_family": "large_mixed",
+        "question": "A team can choose Plan A with low risk and moderate reward or Plan B with high risk and high reward. Give a balanced recommendation assuming reliability matters most.",
+        "answer": "Prefer Plan A unless the reward gap is mission critical.",
+    },
+]
+
+
+def build_builtin_tiny(args: argparse.Namespace) -> None:
+    out_dir = os.path.abspath(args.output_dir)
+    rows: List[Dict[str, Any]] = []
+    for index, item in enumerate(BUILTIN_TINY_ROWS):
+        family = item["dag_family"]
+        rows.append(
+            make_record(
+                {
+                    "question": item["question"],
+                    "answer": item["answer"],
+                    "source": "builtin_tiny",
+                },
+                dataset=item["dataset"],
+                index=index,
+                output_length=args.output_length,
+                dag_family=family,
+                yaml_name=yaml_for_family(family, args.output_length),
+            )
+        )
+    mixed_path = os.path.join(out_dir, f"mixed_{args.output_length}_tiny.jsonl")
+    count = write_jsonl(mixed_path, rows)
+    manifest = {
+        "seed": None,
+        "size": "tiny",
+        "builtin_tiny": True,
+        "output_length": args.output_length,
+        "mixed_count": count,
+        "datasets": sorted({row["dataset"] for row in rows}),
+        "counts": {
+            dataset: sum(1 for row in rows if row["dataset"] == dataset)
+            for dataset in sorted({row["dataset"] for row in rows})
+        },
+    }
+    manifest_path = os.path.join(out_dir, f"manifest_{args.output_length}_tiny.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2, sort_keys=True)
+    print(f"builtin tiny: {count} rows -> {mixed_path}")
+    print(f"manifest -> {manifest_path}")
+
+
 def build(args: argparse.Namespace) -> None:
     rng = random.Random(args.seed)
     data_dir = os.path.abspath(args.data_dir)
@@ -177,8 +264,12 @@ def main() -> None:
     p.add_argument("--load-limit", type=int, default=None)
     p.add_argument("--output-length", choices=("short", "medium", "long"), default="medium")
     p.add_argument("--seed", type=int, default=20260707)
+    p.add_argument("--builtin-tiny", action="store_true", help="build a small built-in workload without external datasets")
     args = p.parse_args()
-    build(args)
+    if args.builtin_tiny:
+        build_builtin_tiny(args)
+    else:
+        build(args)
 
 
 if __name__ == "__main__":

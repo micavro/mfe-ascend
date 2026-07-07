@@ -34,6 +34,27 @@ OUTPUT_TOKENS = {
     "long": 4096,
 }
 
+BRIEF_FIELDS = [
+    "scheduler",
+    "output_length",
+    "repeat_index",
+    "count",
+    "completed",
+    "success_rate",
+    "makespan_s",
+    "total_tokens",
+    "output_tokens",
+    "total_tokens_per_s",
+    "output_tokens_per_s",
+    "req_per_s",
+    "avg_wait_s",
+    "p95_latency_s",
+    "ready_queue_peak",
+    "device_busy_pct",
+    "load_imbalance",
+    "parallelism_utilization",
+]
+
 
 def read_jsonl(path: str) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
@@ -273,6 +294,62 @@ def write_summary_csv(path: str, rows: List[Dict[str, Any]]) -> None:
             writer.writerow({k: row.get(k) for k in fields})
 
 
+def compact_device_busy(summary: Mapping[str, Any]) -> str:
+    busy = summary.get("device_busy_pct") or {}
+    if not isinstance(busy, Mapping):
+        return ""
+    return ";".join(f"{k}:{float(v):.4f}" for k, v in sorted(busy.items(), key=lambda x: str(x[0])))
+
+
+def brief_summary_row(summary: Mapping[str, Any]) -> Dict[str, Any]:
+    return {
+        "scheduler": summary.get("scheduler"),
+        "output_length": summary.get("output_length"),
+        "repeat_index": summary.get("repeat_index"),
+        "count": summary.get("count"),
+        "completed": summary.get("completed"),
+        "success_rate": round(float(summary.get("success_rate") or 0.0), 4),
+        "makespan_s": round(float(summary.get("makespan") or 0.0), 4),
+        "total_tokens": summary.get("total_tokens"),
+        "output_tokens": summary.get("output_tokens"),
+        "total_tokens_per_s": round(float(summary.get("total_token_throughput") or 0.0), 4),
+        "output_tokens_per_s": round(float(summary.get("output_token_throughput") or 0.0), 4),
+        "req_per_s": round(float(summary.get("request_throughput") or 0.0), 4),
+        "avg_wait_s": round(float(summary.get("waiting_time_mean") or 0.0), 4),
+        "p95_latency_s": round(float(summary.get("latency_p95") or 0.0), 4),
+        "ready_queue_peak": summary.get("ready_queue_peak"),
+        "device_busy_pct": compact_device_busy(summary),
+        "load_imbalance": round(float(summary.get("load_imbalance") or 0.0), 4),
+        "parallelism_utilization": round(float(summary.get("parallelism_utilization") or 0.0), 4),
+    }
+
+
+def print_brief_summary(summary: Mapping[str, Any]) -> None:
+    row = brief_summary_row(summary)
+    print("MFE_BRIEF_RESULT_START", flush=True)
+    print(",".join(BRIEF_FIELDS), flush=True)
+    print(",".join(str(row.get(field, "")) for field in BRIEF_FIELDS), flush=True)
+    print("MFE_BRIEF_RESULT_END", flush=True)
+
+
+def write_brief_outputs(output_dir: str, summaries: List[Dict[str, Any]]) -> None:
+    rows = [brief_summary_row(summary) for summary in summaries]
+    csv_path = os.path.join(output_dir, "brief_summary.csv")
+    txt_path = os.path.join(output_dir, "brief_summary.txt")
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=BRIEF_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("MFE_BRIEF_RESULT_START\n")
+        f.write(",".join(BRIEF_FIELDS) + "\n")
+        for row in rows:
+            f.write(",".join(str(row.get(field, "")) for field in BRIEF_FIELDS) + "\n")
+        f.write("MFE_BRIEF_RESULT_END\n")
+    print(f"saved brief summary: {csv_path}")
+    print(f"saved brief text: {txt_path}")
+
+
 def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_index: int, run_info: Dict[str, Any]) -> Dict[str, Any]:
     os.environ["MFE_SCHEDULER"] = args.scheduler
     os.environ["MFE_OUTPUT_MAX_TOKENS"] = str(OUTPUT_TOKENS[args.output_length])
@@ -323,6 +400,7 @@ def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_i
         json.dump(_to_json_safe(summary), f, ensure_ascii=False, indent=2, default=_json_default)
     print(f"saved detail: {detail_path}")
     print(f"saved summary: {summary_path}")
+    print_brief_summary(summary)
     return summary
 
 
@@ -390,6 +468,7 @@ def main() -> None:
     with open(aggregate_path, "w", encoding="utf-8") as f:
         json.dump(_to_json_safe(summaries), f, ensure_ascii=False, indent=2, default=_json_default)
     write_summary_csv(csv_path, summaries)
+    write_brief_outputs(args.output_dir, summaries)
     print(f"saved aggregate summary: {aggregate_path}")
     print(f"saved csv summary: {csv_path}")
 

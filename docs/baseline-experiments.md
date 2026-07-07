@@ -18,6 +18,19 @@ python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir dat
 python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments --size dev --output-length long
 ```
 
+If the Ascend machine cannot download public datasets, build a small built-in
+workload instead:
+
+```bash
+python -m mfe.scripts.build_experiment_datasets \
+  --builtin-tiny \
+  --output-dir data/experiments \
+  --output-length medium
+```
+
+This writes `data/experiments/mixed_medium_tiny.jsonl` and does not require any
+external parquet files.
+
 Each JSONL row contains `sample_id`, `dataset`, `dag_family`, `yaml`,
 `question`, `answer`, estimated input length, output length regime, and source
 metadata.
@@ -79,3 +92,13 @@ Summary metrics include:
 
 `--test-worker` uses synthetic token counts from `--output-length`; real vLLM
 runs record token counts from vLLM/tokenizer outputs.
+
+Every run also prints a compact copyable block to stdout and saves
+`brief_summary.csv` plus `brief_summary.txt` in the output directory:
+
+```text
+MFE_BRIEF_RESULT_START
+scheduler,output_length,repeat_index,count,completed,success_rate,makespan_s,total_tokens,output_tokens,total_tokens_per_s,output_tokens_per_s,req_per_s,avg_wait_s,p95_latency_s,ready_queue_peak,device_busy_pct,load_imbalance,parallelism_utilization
+fcfs,medium,1,7,7,1.0,123.4567,89123,45678,721.63,370.04,0.0567,12.3456,40.1234,7,0:0.8123;1:0.7744;2:0.7655;3:0.8021,1.0612,0.7888
+MFE_BRIEF_RESULT_END
+```
