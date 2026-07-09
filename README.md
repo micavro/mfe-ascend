@@ -76,7 +76,7 @@ bash deploy/run_unified.sh custom \
 1. `eager`：默认方案。调度器每轮收集 ready `(query, operator)`，按 ready list 顺序把第一个任务派给空闲 worker。它是当前 FCFS/ready-task baseline，适合做稳定基线。
 2. `sailp`：SAI-LP/SAIL 风格的 admission-time workflow scheduler。提交 query 时根据 DAG、worker 数、可选 `reuse_from`/`reuse_group`/`eligible_devices`/`sailp` cost hints 生成 `schedule_plan`，运行时优先按计划 worker/timeline 派发 ready op。
 
-Baseline 实验入口支持显式 `fcfs` 和 `sjf`：
+Baseline 实验入口支持显式 `fcfs`、`sjf` 和 `sailp`：
 
 ```bash
 python -m mfe.scripts.experiment_baselines \

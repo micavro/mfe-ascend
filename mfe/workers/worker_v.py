@@ -192,10 +192,7 @@ class vLLMWorker:
             item_start = prefill_start
             item_end = time.perf_counter()
             gen_text = output.outputs[0].text if output.outputs else ""
-            if isinstance(inputs[i], str):
-                full_text = inputs[i] + gen_text
-            else:
-                full_text = "".join([m.get("content", "") for m in inputs[i]]) + gen_text
+            input_text = inputs[i] if isinstance(inputs[i], str) else str(inputs[i])
             prompt_tokens = _safe_len(getattr(output, "prompt_token_ids", None))
             output_tokens = _safe_len(getattr(output.outputs[0], "token_ids", None)) if output.outputs else 0
             if prompt_tokens <= 0 and self.tokenizer is not None:
@@ -205,13 +202,13 @@ class vLLMWorker:
             results.append(
                 {
                     "id": queries[i].id,
-                    "output": full_text,
+                    "output": gen_text,
                     "benchmark": (item_start, item_end),
                     "metrics": {
                         "input_tokens": int(prompt_tokens),
                         "output_tokens": int(output_tokens),
                         "total_tokens": int(prompt_tokens + output_tokens),
-                        "input_chars": len(inputs[i]) if isinstance(inputs[i], str) else len(str(inputs[i])),
+                        "input_chars": len(input_text),
                         "output_chars": len(gen_text),
                         "synthetic_tokens": False,
                     },

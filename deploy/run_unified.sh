@@ -22,10 +22,14 @@ Options:
   --questions-file PATH       run a JSONL experiment workload instead of one parquet dataset
   --yaml FILE                 default: adv_reason_3.yaml
   --num N                     default: 20
-  --scheduler fcfs|sjf|eager  default: current MFE_SCHEDULER or fcfs
+  --scheduler fcfs|sjf|eager|sailp  default: current MFE_SCHEDULER or fcfs
   --output-length short|medium|long
   --repeat N                  experiment repeats, default: 1
   --send-interval SECONDS
+  --arrival-mode fixed|poisson-burst
+  --arrival-batch-size N       independent queries per arrival burst
+  --poisson-rate FLOAT         burst arrivals per second for poisson-burst
+  --arrival-seed N
   --templates-dir PATH        default: templates
   --max-model-len N
   --gpu-memory-utilization F
@@ -58,6 +62,10 @@ SCHEDULER="${MFE_SCHEDULER:-fcfs}"
 OUTPUT_LENGTH="medium"
 REPEAT="1"
 SEND_INTERVAL="0"
+ARRIVAL_MODE="fixed"
+ARRIVAL_BATCH_SIZE=""
+POISSON_RATE="1.0"
+ARRIVAL_SEED="20260709"
 TEMPLATES_DIR="templates"
 MAX_MODEL_LEN="${MFE_MAX_MODEL_LEN:-}"
 GPU_MEMORY_UTILIZATION="${MFE_GPU_MEMORY_UTILIZATION:-}"
@@ -142,6 +150,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --send-interval)
       SEND_INTERVAL="$2"
+      shift 2
+      ;;
+    --arrival-mode)
+      ARRIVAL_MODE="$2"
+      shift 2
+      ;;
+    --arrival-batch-size)
+      ARRIVAL_BATCH_SIZE="$2"
+      shift 2
+      ;;
+    --poisson-rate)
+      POISSON_RATE="$2"
+      shift 2
+      ;;
+    --arrival-seed)
+      ARRIVAL_SEED="$2"
       shift 2
       ;;
     --templates-dir)
@@ -279,7 +303,10 @@ if [[ "$MODE" == "smoke" ]]; then
 fi
 
 if [[ -n "$QUESTIONS_FILE" ]]; then
-  EXP_ARGS=(--questions-file "$QUESTIONS_FILE" --scheduler "$SCHEDULER" --output-length "$OUTPUT_LENGTH" --repeat "$REPEAT" --send-interval "$SEND_INTERVAL" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR")
+  EXP_ARGS=(--questions-file "$QUESTIONS_FILE" --scheduler "$SCHEDULER" --output-length "$OUTPUT_LENGTH" --repeat "$REPEAT" --send-interval "$SEND_INTERVAL" --arrival-mode "$ARRIVAL_MODE" --poisson-rate "$POISSON_RATE" --arrival-seed "$ARRIVAL_SEED" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR")
+  if [[ -n "$ARRIVAL_BATCH_SIZE" ]]; then
+    EXP_ARGS+=(--arrival-batch-size "$ARRIVAL_BATCH_SIZE")
+  fi
   if [[ -n "$MODEL_PATH" ]]; then
     EXP_ARGS+=(--model-path "$MODEL_PATH")
   fi
@@ -303,7 +330,10 @@ if [[ -n "$QUESTIONS_FILE" ]]; then
   fi
   python -m mfe.scripts.experiment_baselines "${EXP_ARGS[@]}"
 else
-  CLIENT_ARGS=(--dataset "$DATASET" --yaml "$YAML_FILE" -n "$NUM" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR")
+  CLIENT_ARGS=(--dataset "$DATASET" --yaml "$YAML_FILE" -n "$NUM" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR" --send-interval "$SEND_INTERVAL" --arrival-mode "$ARRIVAL_MODE" --poisson-rate "$POISSON_RATE" --arrival-seed "$ARRIVAL_SEED")
+  if [[ -n "$ARRIVAL_BATCH_SIZE" ]]; then
+    CLIENT_ARGS+=(--arrival-batch-size "$ARRIVAL_BATCH_SIZE")
+  fi
   if [[ -n "$MODEL_PATH" ]]; then
     CLIENT_ARGS+=(--model-path "$MODEL_PATH")
   fi

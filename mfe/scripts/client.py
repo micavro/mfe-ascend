@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import sys
 import threading
 import time
@@ -192,15 +193,13 @@ def _extract_final_answer(st: Dict[str, Any]) -> str:
         return ""
     if not benchmark:
         return _strip_chat_template(next(iter(op_output.values()), ""))
-    sorted_ops = sorted(benchmark.keys(), key=lambda k: benchmark[k][1] if k in benchmark else 0)
-    last_op = sorted_ops[-1]
-    full_last = op_output.get(last_op, "")
-    if len(sorted_ops) > 1:
-        prev_op = sorted_ops[-2]
-        prefix = op_output.get(prev_op, "")
-        if full_last.startswith(prefix):
-            full_last = full_last[len(prefix):].strip()
-    return _strip_chat_template(full_last)
+    sorted_ops = sorted(
+        (k for k in benchmark.keys() if k in op_output),
+        key=lambda k: benchmark[k][1] if k in benchmark else 0,
+    )
+    if not sorted_ops:
+        return _strip_chat_template(next(iter(op_output.values()), ""))
+    return _strip_chat_template(op_output.get(sorted_ops[-1], ""))
 
 
 def _build_error_result(item: Dict[str, Any], uid: str, st: Dict[str, Any], submit_time: float) -> Dict[str, Any]:
@@ -243,13 +242,16 @@ def run_data_test(
     client: Client,
     questions: List[Dict[str, Any]],
     send_interval: float = 0.0,
+    arrival_mode: str = "fixed",
+    arrival_batch_size: Optional[int] = None,
+    poisson_rate: float = 1.0,
+    arrival_seed: int = 20260709,
 ) -> List[Dict[str, Any]]:
     """发送所有问题、等待完成、返回结果列表。questions 每项需有 question、yaml。"""
     uids: List[str] = []
     submit_times: Dict[str, float] = {}
-    for i, item in enumerate(questions):
-        if i > 0 and send_interval > 0:
-            time.sleep(send_interval)
+
+    def submit_one(item: Dict[str, Any]) -> None:
         q = item.get("question", "")
         yaml_name = item.get("yaml", "adv_reason_3.yaml")
         if not yaml_name.endswith(".yaml"):
@@ -258,6 +260,22 @@ def run_data_test(
         uid = client.submit(yaml_name, q, metadata=item)
         uids.append(uid)
         submit_times[uid] = submit_time
+
+    arrival_mode = (arrival_mode or "fixed").strip().lower()
+    if arrival_mode in {"poisson", "poisson-burst", "poisson_burst", "poisson-batch", "poisson_batch"}:
+        rng = random.Random(arrival_seed)
+        batch_size = max(1, int(arrival_batch_size or 1))
+        rate = max(0.0, float(poisson_rate or 0.0))
+        for start in range(0, len(questions), batch_size):
+            for item in questions[start : start + batch_size]:
+                submit_one(item)
+            if start + batch_size < len(questions) and rate > 0:
+                time.sleep(rng.expovariate(rate))
+    else:
+        for i, item in enumerate(questions):
+            if i > 0 and send_interval > 0:
+                time.sleep(send_interval)
+            submit_one(item)
 
     completed: Dict[str, Dict[str, Any]] = {}
     last_progress = 0.0
@@ -349,10 +367,16 @@ def main() -> None:
     p.add_argument("--max-model-len", type=int, default=None, help="覆盖 vLLM max_model_len；也可用 MFE_MAX_MODEL_LEN")
     p.add_argument("--offline", action="store_true", help="启用 HuggingFace/Transformers/Datasets 离线模式")
     p.add_argument("--send-interval", type=float, default=0.0, help="发送间隔（秒）")
+    p.add_argument("--arrival-mode", choices=("fixed", "poisson-burst", "poisson-batch"), default="fixed")
+    p.add_argument("--arrival-batch-size", type=int, default=None)
+    p.add_argument("--poisson-rate", type=float, default=1.0)
+    p.add_argument("--arrival-seed", type=int, default=20260709)
     p.add_argument("--worker-delay", type=float, default=None, help="TestWorker 模拟延迟（秒）")
     p.add_argument("--test-worker", action="store_true", help="使用 TestWorker")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
+    if args.arrival_mode == "poisson-batch":
+        args.arrival_mode = "poisson-burst"
 
     if args.verbose:
         set_verbose(True)
@@ -394,7 +418,15 @@ def main() -> None:
             print(f"No data for dataset {args.dataset}. Expected parquet file: {expected_path}")
             return
         print(f"Loaded {len(questions)} questions from data/{args.dataset}/{args.dataset}.parquet")
-        results = run_data_test(client, questions, send_interval=args.send_interval)
+        results = run_data_test(
+            client,
+            questions,
+            send_interval=args.send_interval,
+            arrival_mode=args.arrival_mode,
+            arrival_batch_size=args.arrival_batch_size,
+            poisson_rate=args.poisson_rate,
+            arrival_seed=args.arrival_seed,
+        )
         _zero_timestamps(results)
         run_info = collect_run_info(runtime, cwd=root)
         for item in results:

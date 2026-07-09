@@ -1,0 +1,15 @@
+# CUDA/A800 smoke-test stack.
+#
+# This keeps the MFE package install compatible with vLLM 0.16.x on the
+# available A800/CUDA host. Use it with:
+#   python -m pip install -e ".[cuda-smoke]" -c constraints/cuda-a800-vllm16.txt
+#
+# The torch packages are resolved from the configured PyTorch CUDA index on the
+# target host; on the verified A800 server they resolve to cu128 builds.
+vllm==0.16.0
+torch==2.9.1
+torchaudio==2.9.1
+torchvision==0.24.1
+transformers==4.57.6
+tokenizers==0.22.2
+numpy<2.3

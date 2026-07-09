@@ -63,6 +63,12 @@ The check fails if:
 
 ## vLLM smoke
 
+Install the validated CUDA/A800 smoke stack in an isolated environment:
+
+```bash
+python -m pip install -e ".[cuda-smoke]" -c constraints/cuda-a800-vllm16.txt
+```
+
 Before running a full MFE workflow, run one direct vLLM generation:
 
 ```bash

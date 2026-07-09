@@ -14,9 +14,19 @@ python -m mfe.scripts.download_datasets --datasets gsm8k math drop hotpotqa stra
 Build deterministic JSONL workloads:
 
 ```bash
-python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments --size smoke --output-length medium
-python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments --size dev --output-length long
+python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments --size first100 --output-length medium
+python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments --size first200 --output-length medium
+python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments --size first500 --output-length medium
 ```
+
+The prepared offline bundle for server upload is
+`data/mfe_offline_medium_100_200_500.zip`. It contains the six parquet datasets
+plus per-dataset and mixed JSONL workloads for 100, 200, and 500 examples per
+dataset. The mixed workload sizes are 600, 1200, and 3000 rows.
+
+The current DAG mapping is GSM8K -> chain/path, MATH -> reflect, DROP ->
+parallel fork-join, HotpotQA -> parallel tree-reduce, StrategyQA -> debate, and
+MBPP -> large mixed DAG.
 
 If the Ascend machine cannot download public datasets, build a small built-in
 workload instead:
@@ -51,6 +61,9 @@ python -m mfe.scripts.experiment_baselines \
   --questions-file data/experiments/mixed_medium_smoke.jsonl \
   --scheduler sjf \
   --output-length medium \
+  --arrival-mode poisson-burst \
+  --arrival-batch-size 4 \
+  --poisson-rate 1.0 \
   --test-worker \
   --worker-delay 0.01
 ```
@@ -76,8 +89,17 @@ MFE_SCHEDULER=sjf bash deploy/run_unified.sh company-ascend \
   --scheduler sjf \
   --output-length long \
   --repeat 3 \
+  --arrival-mode poisson-burst \
+  --arrival-batch-size 4 \
+  --poisson-rate 1.0 \
   --offline
 ```
+
+Use `--scheduler sailp` for the SAI-LP scheduler. In `poisson-burst` mode,
+`--arrival-batch-size` is only the number of independent queries submitted in one
+client-side arrival burst. It does not enable runtime query batching; the runtime
+still dispatches one `(query, operator)` at a time with `query_ids=[uid]`.
+`--poisson-rate` is the burst arrival rate in bursts per second.
 
 ## Metrics
 

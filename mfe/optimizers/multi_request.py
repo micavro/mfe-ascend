@@ -148,10 +148,19 @@ class MultiRequestOptimizer:
         t = (template or "").strip()
         if not t:
             raise ValueError("template is empty")
-        path = os.path.abspath(t) if os.path.isabs(t) or os.path.sep in t else os.path.join(self.templates_dir, t)
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"template not found: {path}")
-        return path
+        if os.path.isabs(t):
+            candidates = [t]
+        else:
+            candidates = [os.path.join(self.templates_dir, t), os.path.abspath(t)]
+        seen: List[str] = []
+        for candidate in candidates:
+            path = os.path.abspath(candidate)
+            if path in seen:
+                continue
+            seen.append(path)
+            if os.path.isfile(path):
+                return path
+        raise FileNotFoundError(f"template not found: {t}; tried: {', '.join(seen)}")
 
     def _get_dag(self, template: str) -> Tuple[Dict[str, Operator], List[Operator], List[Operator]]:
         path = self._resolve_template_path(template)
@@ -356,9 +365,14 @@ class MultiRequestOptimizer:
 
     def _build_prompt(self, uid: str, op: Operator) -> str:
         q = self.requests[uid]
-        prompt = q.prompt
-        history = "".join(q.op_output.get(inp.id, "") for inp in op.input_ops)
-        return prompt + history
+        parts: List[str] = []
+        if q.prompt:
+            parts.append(q.prompt.strip())
+        for inp in op.input_ops:
+            parent_output = q.op_output.get(inp.id, "")
+            if parent_output:
+                parts.append(f"[{inp.id} output]\n{parent_output.strip()}")
+        return "\n\n".join(parts)
 
     def _handle_worker_result(self, worker_id: int, msg: Any, uid: str, op: Operator) -> None:
         if isinstance(msg, dict) and msg.get("command") == "execute":

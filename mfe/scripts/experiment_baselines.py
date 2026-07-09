@@ -366,7 +366,15 @@ def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_i
     proc.start()
     client = Client(req_q, resp_q)
     try:
-        results = run_data_test(client, questions, send_interval=args.send_interval)
+        results = run_data_test(
+            client,
+            questions,
+            send_interval=args.send_interval,
+            arrival_mode=args.arrival_mode,
+            arrival_batch_size=args.arrival_batch_size,
+            poisson_rate=args.poisson_rate,
+            arrival_seed=args.arrival_seed,
+        )
     finally:
         client.close()
         proc.join(timeout=5.0)
@@ -387,6 +395,10 @@ def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_i
         "output_max_tokens": OUTPUT_TOKENS[args.output_length],
         "test_worker": bool(args.test_worker),
         "send_interval": args.send_interval,
+        "arrival_mode": args.arrival_mode,
+        "arrival_batch_size": args.arrival_batch_size,
+        "poisson_rate": args.poisson_rate,
+        "arrival_seed": args.arrival_seed,
         "device_count": args.device_count,
         "run_info": run_info,
     })
@@ -407,12 +419,16 @@ def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_i
 def main() -> None:
     p = argparse.ArgumentParser(description="Run MFE baseline scheduler experiments")
     p.add_argument("--questions-file", required=True)
-    p.add_argument("--scheduler", choices=("fcfs", "sjf", "eager"), default="fcfs")
+    p.add_argument("--scheduler", choices=("fcfs", "sjf", "eager", "sailp"), default="fcfs")
     p.add_argument("--output-length", choices=sorted(OUTPUT_TOKENS), default="medium")
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--templates-dir", default="templates")
     p.add_argument("--output-dir", default=None)
     p.add_argument("--send-interval", type=float, default=0.0)
+    p.add_argument("--arrival-mode", choices=("fixed", "poisson-burst", "poisson-batch"), default="fixed")
+    p.add_argument("--arrival-batch-size", type=int, default=None)
+    p.add_argument("--poisson-rate", type=float, default=1.0, help="burst arrivals per second for --arrival-mode poisson-burst")
+    p.add_argument("--arrival-seed", type=int, default=20260709)
     p.add_argument("--test-worker", action="store_true")
     p.add_argument("--worker-delay", type=float, default=None)
     p.add_argument("--device-count", type=int, default=None)
@@ -423,6 +439,8 @@ def main() -> None:
     p.add_argument("--offline", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
+    if args.arrival_mode == "poisson-batch":
+        args.arrival_mode = "poisson-burst"
 
     if args.verbose:
         set_verbose(True)
@@ -453,6 +471,8 @@ def main() -> None:
         else:
             ids = [x for x in (runtime.device_ids or "").split(",") if x.strip()]
             args.device_count = len(ids) if ids else 1
+    if args.arrival_batch_size is None and args.arrival_mode == "poisson-burst":
+        args.arrival_batch_size = max(1, int(args.device_count or 1))
 
     questions = read_jsonl(args.questions_file)
     if not questions:

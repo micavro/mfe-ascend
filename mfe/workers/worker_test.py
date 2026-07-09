@@ -19,7 +19,7 @@ class TestWorker:
         self.physical_device_id = physical_device_id
         self.cmd_queue = cmd_queue
         self.response_queue = result_queue
-        logger.info("TestWorker[%s] initialized (echo mode)", id)
+        logger.info("TestWorker[%s] initialized (synthetic generation mode)", id)
 
     def execute(self, exe_info: ExecuteInfo) -> Dict[str, Any]:
         op = exe_info.op
@@ -35,18 +35,19 @@ class TestWorker:
             input_tokens = max(1, (len(text) + 3) // 4) if text else 0
             output_tokens = int(os.environ.get("MFE_TEST_OUTPUT_TOKENS", os.environ.get("MFE_OUTPUT_MAX_TOKENS", "0")) or 0)
             if output_tokens <= 0:
-                output_tokens = input_tokens
+                output_tokens = max(1, (len(op_name) + 10) // 4)
+            generated_text = os.environ.get("MFE_TEST_OUTPUT_TEXT") or f"{op_name} synthetic output"
             results.append(
                 {
                     "id": qid,
-                    "output": text,
+                    "output": generated_text,
                     "benchmark": (start, time.perf_counter()),
                     "metrics": {
                         "input_tokens": input_tokens,
                         "output_tokens": output_tokens,
                         "total_tokens": input_tokens + output_tokens,
                         "input_chars": len(text),
-                        "output_chars": len(text),
+                        "output_chars": len(generated_text),
                         "synthetic_tokens": True,
                     },
                 }
