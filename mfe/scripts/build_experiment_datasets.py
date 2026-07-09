@@ -15,19 +15,30 @@ from mfe.scripts.process_datasets import PROCESSORS, _to_json_safe
 
 
 DATASET_DAG_MAP: Dict[str, str] = {
-    "gsm8k": "path_n",
-    "math": "unrolled_reflect_r",
+    "gsm8k": "chain_gsm8k",
+    "strategyqa": "branch_verify_strategyqa",
+    "mmlu_pro": "debate_mmlu_pro",
+    "math": "self_refine_math",
+    "mbpp": "plan_code_test_mbpp",
+    "gpqa_diamond": "research_panel_gpqa_diamond",
+    "swebench_verified": "agentic_repair_swebench_verified",
     "drop": "fork_join_k",
     "hotpotqa": "tree_reduce_kd",
-    "strategyqa": "diamond",
-    "mbpp": "plan_code_test",
 }
 
 DEFAULT_YAML_BY_FAMILY: Dict[str, str] = {
+    "chain_gsm8k": "bench/chain_gsm8k_medium.yaml",
+    "branch_verify_strategyqa": "bench/branch_verify_strategyqa_medium.yaml",
+    "debate_mmlu_pro": "bench/debate_mmlu_pro_medium.yaml",
+    "self_refine_math": "bench/self_refine_math_medium.yaml",
+    "plan_code_test_mbpp": "bench/plan_code_test_mbpp_medium.yaml",
+    "research_panel_gpqa_diamond": "bench/research_panel_gpqa_diamond_medium.yaml",
+    "agentic_repair_swebench_verified": "bench/agentic_repair_swebench_verified_medium.yaml",
     "path_n": "bench/path_4_medium.yaml",
     "unrolled_reflect_r": "bench/reflect_2_medium.yaml",
     "fork_join_k": "bench/fork_join_4_medium.yaml",
     "tree_reduce_kd": "bench/tree_reduce_2x2_medium.yaml",
+    "debate": "bench/tournament_debate_4_medium.yaml",
     "diamond": "bench/diamond_medium.yaml",
     "plan_code_test": "bench/plan_code_test_medium.yaml",
     "large_mixed": "bench/large_mixed_medium.yaml",
@@ -36,7 +47,10 @@ DEFAULT_YAML_BY_FAMILY: Dict[str, str] = {
 SIZE_PRESETS = {
     "tiny": 1,
     "smoke": 5,
+    "first50": 50,
+    "first100": 100,
     "first200": 200,
+    "first500": 500,
     "dev": 25,
     "full": 100,
 }
@@ -111,7 +125,11 @@ def write_jsonl(path: str, rows: Iterable[Dict[str, Any]]) -> int:
     count = 0
     with open(path, "w", encoding="utf-8") as f:
         for row in rows:
-            f.write(json.dumps(_to_json_safe(row), ensure_ascii=False, sort_keys=True) + "\n")
+            line = json.dumps(_to_json_safe(row), ensure_ascii=False, sort_keys=True)
+            # JSON permits U+2028/U+2029 inside strings, but many line-oriented
+            # tools treat them as hard line breaks and corrupt JSONL records.
+            line = line.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+            f.write(line + "\n")
             count += 1
     return count
 
@@ -225,6 +243,9 @@ def build(args: argparse.Namespace) -> None:
         dataset = dataset.lower()
         rows = load_dataset_rows(data_dir, dataset, load_limit)
         rows = [r for r in rows if str(r.get("question", "") or "").strip()]
+        if len(rows) < per_dataset:
+            print(f"{dataset}: only {len(rows)} usable rows, skip size={args.size} need={per_dataset}")
+            continue
         if args.selection == "random":
             rng.shuffle(rows)
         selected = rows[:per_dataset]
@@ -248,6 +269,11 @@ def build(args: argparse.Namespace) -> None:
         "output_length": args.output_length,
         "datasets": args.datasets,
         "counts": {k: len(v) for k, v in by_dataset.items()},
+        "skipped": {
+            dataset: f"fewer than {per_dataset} usable rows"
+            for dataset in args.datasets
+            if dataset.lower() not in by_dataset
+        },
         "mixed_count": len(all_records),
     }
     manifest_path = os.path.join(out_dir, f"manifest_{args.output_length}_{args.size}.json")
@@ -260,7 +286,11 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Build fixed JSONL workloads for MFE experiments")
     p.add_argument("--data-dir", default="data")
     p.add_argument("--output-dir", default="data/experiments")
-    p.add_argument("--datasets", nargs="+", default=["gsm8k", "math", "drop", "hotpotqa", "strategyqa", "mbpp"])
+    p.add_argument(
+        "--datasets",
+        nargs="+",
+        default=["gsm8k", "strategyqa", "mmlu_pro", "math", "mbpp", "gpqa_diamond", "swebench_verified"],
+    )
     p.add_argument("--size", choices=sorted(SIZE_PRESETS), default="smoke")
     p.add_argument("--per-dataset", type=int, default=None)
     p.add_argument("--load-limit", type=int, default=None)

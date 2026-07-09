@@ -1,0 +1,99 @@
+start_ops: [read]
+end_ops: [final]
+ops:
+  read:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Read the science question, choices, and any provided context; identify the domain and likely traps."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [route, plan]
+  route:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Route the problem to biology, chemistry, physics, or cross-domain reasoning tracks."
+    max_tokens: 512
+    input_ops: [read]
+    output_ops: [expert_a, expert_b, expert_c]
+  plan:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Create a solving plan, including equations, assumptions, and choice-elimination criteria."
+    max_tokens: 1024
+    input_ops: [read]
+    output_ops: [derive, eliminate]
+  expert_a:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Solve from specialist perspective A and state the strongest evidence."
+    max_tokens: 1536
+    input_ops: [route]
+    output_ops: [evidence_merge]
+  expert_b:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Solve from specialist perspective B and state the strongest evidence."
+    max_tokens: 1536
+    input_ops: [route]
+    output_ops: [evidence_merge]
+  expert_c:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Check assumptions, units, and edge cases from an independent specialist perspective."
+    max_tokens: 1536
+    input_ops: [route]
+    output_ops: [evidence_merge]
+  derive:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Carry out the main derivation or mechanism-level reasoning."
+    max_tokens: 1536
+    input_ops: [plan]
+    output_ops: [candidate]
+  eliminate:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Eliminate implausible answer choices and record why they fail."
+    max_tokens: 1024
+    input_ops: [plan]
+    output_ops: [candidate]
+  evidence_merge:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Merge the specialist evidence and identify agreements or contradictions."
+    max_tokens: 1536
+    input_ops: [expert_a, expert_b, expert_c]
+    output_ops: [candidate]
+  candidate:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Produce a candidate answer using derivation, elimination, and merged expert evidence."
+    max_tokens: 1024
+    input_ops: [derive, eliminate, evidence_merge]
+    output_ops: [pro, con]
+  pro:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue for the candidate answer as strongly as possible."
+    max_tokens: 1024
+    input_ops: [candidate]
+    output_ops: [judge]
+  con:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Argue against the candidate answer and surface the best alternative."
+    max_tokens: 1024
+    input_ops: [candidate]
+    output_ops: [judge]
+  judge:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Judge the pro and con arguments, then choose the most defensible answer."
+    max_tokens: 1024
+    input_ops: [pro, con]
+    output_ops: [draft]
+  draft:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Draft the final explanation and selected choice."
+    max_tokens: 1024
+    input_ops: [judge]
+    output_ops: [critic]
+  critic:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Critique the draft for expert-level factual or reasoning mistakes."
+    max_tokens: 1024
+    input_ops: [draft]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Return the final multiple-choice answer and a concise justification."
+    max_tokens: 512
+    input_ops: [critic]
+    output_ops: []

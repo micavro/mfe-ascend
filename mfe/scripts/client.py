@@ -23,7 +23,7 @@ from mfe.config import is_verbose, set_verbose
 from mfe.runtime import RuntimeConfig, collect_run_info
 from mfe.scripts.process_datasets import PROCESSORS
 
-DATASET_NAMES = ("drop", "gsm8k", "hotpotqa", "math", "strategyqa", "mbpp")
+DATASET_NAMES = tuple(sorted(PROCESSORS))
 
 
 def load_questions_from_parquet(
@@ -337,7 +337,7 @@ def run_data_test(
 def main() -> None:
     import argparse
     p = argparse.ArgumentParser(description="MFE 多请求 Client")
-    p.add_argument("--dataset", required=True, type=str.lower, choices=DATASET_NAMES, help="数据集：drop, gsm8k, hotpotqa, math")
+    p.add_argument("--dataset", required=True, type=str.lower, choices=DATASET_NAMES, help="数据集名称")
     p.add_argument("-n", "--num", type=int, default=None, help="使用前 n 个问题测试，不指定则用全部。保存为 {dataset}_{yaml}_result_{n}.json")
     p.add_argument("--templates-dir", default="templates", help="工作流 YAML 目录")
     p.add_argument("--yaml", default="adv_reason_3.yaml", help="YAML 模板，如 adv_reason_4m.yaml。可指定不同 yaml 跑同一数据集，结果文件名会带上 yaml 名")

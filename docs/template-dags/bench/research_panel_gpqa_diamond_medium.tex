@@ -1,0 +1,51 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usetikzlibrary{arrows.meta,positioning}
+\begin{document}
+\begin{tikzpicture}[>=Latex, scale=0.82, transform shape,
+  op/.style={circle, draw, align=center, minimum size=11mm, inner sep=0pt, font=\scriptsize, fill=white},
+  start/.style={op, fill=green!12, draw=green!45!black},
+  end/.style={op, fill=red!10, draw=red!45!black},
+  startend/.style={op, fill=yellow!16, draw=orange!55!black},
+  edge/.style={->, line width=0.45pt, draw=black!70}
+]
+\node[font=\small\bfseries, align=center] at (0,0.95) {bench/research\_panel\_gpqa\_diamond\_medium.yaml\\[-1pt]{\scriptsize 16 ops, 20 edges}};
+\node[start] (n0) at (0.00,0.00) {\texttt{rea}};
+\node[op] (n1) at (1.80,-1.90) {\texttt{rou}};
+\node[op] (n2) at (-1.80,-1.90) {\texttt{pla}};
+\node[op] (n3) at (0.00,-3.80) {\texttt{ea}};
+\node[op] (n4) at (3.60,-3.80) {\texttt{eb}};
+\node[op] (n5) at (7.20,-3.80) {\texttt{ec}};
+\node[op] (n6) at (-7.20,-3.80) {\texttt{der}};
+\node[op] (n7) at (-3.60,-3.80) {\texttt{eli}};
+\node[op] (n8) at (0.00,-5.70) {\texttt{em}};
+\node[op] (n9) at (0.00,-7.60) {\texttt{can}};
+\node[op] (n10) at (1.80,-9.50) {\texttt{pro}};
+\node[op] (n11) at (-1.80,-9.50) {\texttt{con}};
+\node[op] (n12) at (0.00,-11.40) {\texttt{jud}};
+\node[op] (n13) at (0.00,-13.30) {\texttt{dra}};
+\node[op] (n14) at (0.00,-15.20) {\texttt{cri}};
+\node[end] (n15) at (0.00,-17.10) {\texttt{fin}};
+\draw[edge] (n9) -- (n11);
+\draw[edge] (n9) -- (n10);
+\draw[edge] (n11) -- (n12);
+\draw[edge] (n14) -- (n15);
+\draw[edge] (n6) -- (n9);
+\draw[edge] (n13) -- (n14);
+\draw[edge] (n7) -- (n9);
+\draw[edge] (n8) -- (n9);
+\draw[edge] (n3) -- (n8);
+\draw[edge] (n4) -- (n8);
+\draw[edge] (n5) -- (n8);
+\draw[edge] (n12) -- (n13);
+\draw[edge] (n2) -- (n6);
+\draw[edge] (n2) -- (n7);
+\draw[edge] (n10) -- (n12);
+\draw[edge] (n0) -- (n2);
+\draw[edge] (n0) -- (n1);
+\draw[edge] (n1) -- (n3);
+\draw[edge] (n1) -- (n4);
+\draw[edge] (n1) -- (n5);
+\node[start, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (-1.50,-18.05) {start};
+\node[end, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (1.50,-18.05) {end};
+\end{tikzpicture}
+\end{document}

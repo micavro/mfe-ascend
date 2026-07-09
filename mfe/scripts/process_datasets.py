@@ -166,9 +166,86 @@ def process_mbpp(data_dir: str, limit: int | None) -> List[Dict[str, Any]]:
     return out
 
 
+def process_mmlu_pro(data_dir: str, limit: int | None) -> List[Dict[str, Any]]:
+    import pandas as pd
+    path = os.path.join(data_dir, "mmlu_pro", "mmlu_pro.parquet")
+    if not os.path.isfile(path):
+        return []
+    df = pd.read_parquet(path)
+    out = []
+    for _, row in df.iterrows():
+        row_d = _to_json_safe(row.to_dict())
+        question = str(row_d.get("question", "") or "").strip()
+        options = row_d.get("options", [])
+        if not isinstance(options, list):
+            options = []
+        option_lines = []
+        for i, option in enumerate(options):
+            label = chr(ord("A") + i)
+            option_lines.append(f"{label}. {option}")
+        row_d["question_short"] = question
+        row_d["question"] = (
+            f"Subject: {row_d.get('category', '')}\n\nQuestion:\n{question}\n\nOptions:\n"
+            + "\n".join(option_lines)
+        ).strip()
+        row_d["answer"] = row_d.get("answer", "")
+        out.append(row_d)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def process_gpqa_diamond(data_dir: str, limit: int | None) -> List[Dict[str, Any]]:
+    import pandas as pd
+    path = os.path.join(data_dir, "gpqa_diamond", "gpqa_diamond.parquet")
+    if not os.path.isfile(path):
+        return []
+    df = pd.read_parquet(path)
+    out = []
+    for _, row in df.iterrows():
+        row_d = _to_json_safe(row.to_dict())
+        question = str(row_d.get("question", "") or "").strip()
+        row_d["question_short"] = question.splitlines()[0] if question else ""
+        row_d["question"] = question
+        row_d["answer"] = row_d.get("answer", "")
+        out.append(row_d)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def process_swebench_verified(data_dir: str, limit: int | None) -> List[Dict[str, Any]]:
+    import pandas as pd
+    path = os.path.join(data_dir, "swebench_verified", "swebench_verified.parquet")
+    if not os.path.isfile(path):
+        return []
+    df = pd.read_parquet(path)
+    out = []
+    for _, row in df.iterrows():
+        row_d = _to_json_safe(row.to_dict())
+        problem = str(row_d.get("problem_statement", "") or "").strip()
+        repo = row_d.get("repo", "")
+        instance_id = row_d.get("instance_id", "")
+        fail_to_pass = row_d.get("FAIL_TO_PASS", "")
+        pass_to_pass = row_d.get("PASS_TO_PASS", "")
+        row_d["question_short"] = problem.splitlines()[0] if problem else str(instance_id)
+        row_d["question"] = (
+            f"Repository: {repo}\nInstance: {instance_id}\n\nIssue:\n{problem}\n\n"
+            f"Fail-to-pass tests:\n{fail_to_pass}\n\nPass-to-pass tests:\n{pass_to_pass}"
+        ).strip()
+        row_d["answer"] = row_d.get("patch", "")
+        out.append(row_d)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
 PROCESSORS.update({
     "strategyqa": process_strategyqa,
     "mbpp": process_mbpp,
+    "mmlu_pro": process_mmlu_pro,
+    "gpqa_diamond": process_gpqa_diamond,
+    "swebench_verified": process_swebench_verified,
 })
 
 

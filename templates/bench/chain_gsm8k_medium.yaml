@@ -1,0 +1,27 @@
+start_ops: [parse]
+end_ops: [final]
+ops:
+  parse:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Parse the word problem, list the known quantities, and identify the target quantity."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [solve]
+  solve:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Solve the problem step by step using the parsed quantities."
+    max_tokens: 1024
+    input_ops: [parse]
+    output_ops: [check]
+  check:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Check the arithmetic and whether the answer matches the requested quantity."
+    max_tokens: 1024
+    input_ops: [solve]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Return the final numeric answer only."
+    max_tokens: 256
+    input_ops: [check]
+    output_ops: []

@@ -1,0 +1,39 @@
+start_ops: [analyze]
+end_ops: [final]
+ops:
+  analyze:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Analyze the programming task and identify inputs, outputs, constraints, and edge cases."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [plan, tests]
+  plan:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Create a concise implementation plan for the Python function."
+    max_tokens: 1024
+    input_ops: [analyze]
+    output_ops: [code]
+  tests:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Extract the provided tests and add any missing edge-case checks."
+    max_tokens: 1024
+    input_ops: [analyze]
+    output_ops: [review]
+  code:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Write the Python implementation following the plan."
+    max_tokens: 1536
+    input_ops: [plan]
+    output_ops: [review]
+  review:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Review the code against the tests and identify necessary fixes."
+    max_tokens: 1024
+    input_ops: [code, tests]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Return only the final Python code."
+    max_tokens: 1536
+    input_ops: [review]
+    output_ops: []

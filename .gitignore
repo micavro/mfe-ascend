@@ -168,3 +168,6 @@ data/*
 data/gsm8k/*
 !data/gsm8k/gsm8k.parquet
 !data/gsm8k/README.md
+!data/experiments_design7/
+!data/experiments_design7/**
+!data/mfe_design7_medium_50_100_200.zip

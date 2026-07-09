@@ -1,0 +1,27 @@
+{
+  "counts": {
+    "gsm8k": 200,
+    "math": 200,
+    "mbpp": 200,
+    "mmlu_pro": 200,
+    "strategyqa": 200,
+    "swebench_verified": 200
+  },
+  "datasets": [
+    "gsm8k",
+    "strategyqa",
+    "mmlu_pro",
+    "math",
+    "mbpp",
+    "gpqa_diamond",
+    "swebench_verified"
+  ],
+  "mixed_count": 1200,
+  "output_length": "medium",
+  "per_dataset": 200,
+  "seed": 20260709,
+  "size": "first200",
+  "skipped": {
+    "gpqa_diamond": "fewer than 200 usable rows"
+  }
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""下载 DROP、HotpotQA、MATH、GSM8K 数据集到 data/ 目录。"""
+"""下载 benchmark 数据集到 data/ 目录。"""
 
 from __future__ import annotations
 
@@ -61,6 +61,26 @@ DATASET_CONFIGS = {
         "text_key": "prompt",
         "answer_key": "code",
     },
+    "mmlu_pro": {
+        "path": "TIGER-Lab/MMLU-Pro",
+        "split": "test",
+        "text_key": "question",
+        "answer_key": "answer",
+    },
+    "gpqa_diamond": {
+        # The official GPQA dataset is gated on Hugging Face. This public mirror
+        # exposes the diamond subset with question/answer fields.
+        "path": "fingertap/GPQA-Diamond",
+        "split": "test",
+        "text_key": "question",
+        "answer_key": "answer",
+    },
+    "swebench_verified": {
+        "path": "princeton-nlp/SWE-bench_Verified",
+        "split": "test",
+        "text_key": "problem_statement",
+        "answer_key": "patch",
+    },
 }
 
 
@@ -93,7 +113,7 @@ def download_dataset(name: str, data_dir: str, limit: int | None = None) -> str:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="下载 DROP/HotpotQA/MATH/GSM8K 到 data/")
+    p = argparse.ArgumentParser(description="下载 benchmark 数据集到 data/")
     p.add_argument("--data-dir", default="data", help="数据输出目录")
     p.add_argument("--datasets", nargs="+", default=["drop", "hotpotqa", "math", "gsm8k"])
     p.add_argument("--limit", type=int, default=None, help="每个数据集最多下载 N 条（测试用）")

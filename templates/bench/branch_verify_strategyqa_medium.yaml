@@ -1,0 +1,33 @@
+start_ops: [decompose]
+end_ops: [final]
+ops:
+  decompose:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Infer the hidden reasoning strategy and split the yes/no question into checkable subclaims."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [support, challenge]
+  support:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Build the strongest evidence path that supports answering yes."
+    max_tokens: 1024
+    input_ops: [decompose]
+    output_ops: [decide]
+  challenge:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Build the strongest evidence path that supports answering no or exposes a missing assumption."
+    max_tokens: 1024
+    input_ops: [decompose]
+    output_ops: [decide]
+  decide:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Compare the support and challenge tracks, resolve conflicts, and choose yes or no."
+    max_tokens: 1024
+    input_ops: [support, challenge]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Return the final yes/no answer with one concise reason."
+    max_tokens: 512
+    input_ops: [decide]
+    output_ops: []
