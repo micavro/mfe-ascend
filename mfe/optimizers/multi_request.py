@@ -363,6 +363,12 @@ class MultiRequestOptimizer:
         fallback_candidates.sort(key=lambda x: x[0])
         return [(uid, op) for _, uid, op in fallback_candidates]
 
+    @staticmethod
+    def _ordinal_label(index: int) -> str:
+        n = index + 1
+        suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+        return f"{n}{suffix}"
+
     def _prompt_context_ops(self, op: Operator) -> List[Operator]:
         ordered: List[Operator] = []
         visited: Set[str] = set()
@@ -383,15 +389,65 @@ class MultiRequestOptimizer:
             visit(parent)
         return ordered
 
+    def _prompt_context_sections(self, op: Operator) -> Tuple[List[Operator], List[Tuple[Operator, List[Operator]]]]:
+        parents = list(op.input_ops)
+        if len(parents) <= 1:
+            return ([], [(parents[0], self._prompt_context_ops(op))] if parents else [])
+
+        branch_paths: List[Tuple[Operator, List[Operator]]] = []
+        branch_sets: List[Set[str]] = []
+        for parent in parents:
+            path = self._prompt_context_ops(parent)
+            path.append(parent)
+            branch_paths.append((parent, path))
+            branch_sets.append({str(node.id) for node in path})
+
+        common_ids = set.intersection(*branch_sets) if branch_sets else set()
+        common_ops = [node for node in branch_paths[0][1] if str(node.id) in common_ids]
+        emitted = set(common_ids)
+        branches: List[Tuple[Operator, List[Operator]]] = []
+        for parent, path in branch_paths:
+            branch_ops: List[Operator] = []
+            for node in path:
+                node_id = str(node.id)
+                if node_id in emitted:
+                    continue
+                emitted.add(node_id)
+                branch_ops.append(node)
+            branches.append((parent, branch_ops))
+        return common_ops, branches
+
     def _build_prompt(self, uid: str, op: Operator) -> str:
         q = self.requests[uid]
         parts: List[str] = []
         if q.prompt:
             parts.append(q.prompt.strip())
-        for ctx_op in self._prompt_context_ops(op):
-            output = q.op_output.get(ctx_op.id, "")
-            if output:
-                parts.append(f"[{ctx_op.id} output]\n{output.strip()}")
+
+        common_ops, branches = self._prompt_context_sections(op)
+        if common_ops and len(op.input_ops) > 1:
+            common_parts: List[str] = []
+            for ctx_op in common_ops:
+                output = q.op_output.get(ctx_op.id, "")
+                if output:
+                    common_parts.append(f"[{ctx_op.id} output]\n{output.strip()}")
+            if common_parts:
+                parts.append("[shared upstream context]\n" + "\n\n".join(common_parts))
+
+        for branch_index, (parent, branch_ops) in enumerate(branches):
+            branch_parts: List[str] = []
+            for ctx_op in branch_ops:
+                output = q.op_output.get(ctx_op.id, "")
+                if output:
+                    branch_parts.append(f"[{ctx_op.id} output]\n{output.strip()}")
+            if not branch_parts:
+                continue
+            if len(op.input_ops) > 1:
+                parts.append(
+                    f"[{self._ordinal_label(branch_index)} branch via {parent.id}]\n"
+                    + "\n\n".join(branch_parts)
+                )
+                continue
+            parts.extend(branch_parts)
         return "\n\n".join(parts)
 
     def _handle_worker_result(self, worker_id: int, msg: Any, uid: str, op: Operator) -> None:

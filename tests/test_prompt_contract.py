@@ -36,19 +36,23 @@ class PromptContractTest(unittest.TestCase):
         right_mid.input_ops = [shared]
         left_parent.input_ops = [left_mid]
         right_parent.input_ops = [right_mid]
-        third_parent.input_ops = [root]
+        third_parent.input_ops = [shared]
         child.input_ops = [left_parent, right_parent, third_parent]
 
         prompt = optimizer._build_prompt("q1", child)
 
         expected_order = [
             "ROOT QUESTION",
+            "[shared upstream context]",
             "[root output]\nroot generated context",
             "[shared output]\nshared generated context",
+            "[1st branch via left_parent]",
             "[left_mid output]\nleft middle generated context",
             "[left_parent output]\nleft parent generated context",
+            "[2nd branch via right_parent]",
             "[right_mid output]\nright middle generated context",
             "[right_parent output]\nright parent generated context",
+            "[3rd branch via third_parent]",
             "[third_parent output]\nthird parent generated context",
         ]
         cursor = -1
@@ -58,6 +62,9 @@ class PromptContractTest(unittest.TestCase):
             cursor = pos
         self.assertEqual(1, prompt.count("[root output]"))
         self.assertEqual(1, prompt.count("[shared output]"))
+        self.assertEqual(1, prompt.count("[1st branch via left_parent]"))
+        self.assertEqual(1, prompt.count("[2nd branch via right_parent]"))
+        self.assertEqual(1, prompt.count("[3rd branch via third_parent]"))
 
     def test_resolve_template_path_prefers_templates_dir_for_relative_paths(self) -> None:
         optimizer = object.__new__(MultiRequestOptimizer)
