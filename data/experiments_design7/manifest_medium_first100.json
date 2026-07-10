@@ -1,4 +1,13 @@
 {
+  "candidate_counts": {
+    "gsm8k": 1319,
+    "hotpotqa": 7405,
+    "math": 5000,
+    "mbpp": 500,
+    "mmlu_pro": 200,
+    "strategyqa": 687,
+    "swebench_verified": 500
+  },
   "counts": {
     "gsm8k": 100,
     "hotpotqa": 100,
@@ -17,6 +26,34 @@
     "hotpotqa",
     "swebench_verified"
   ],
+  "eligible_counts": {
+    "gsm8k": 1319,
+    "hotpotqa": 7405,
+    "math": 5000,
+    "mbpp": 500,
+    "mmlu_pro": 200,
+    "strategyqa": 687,
+    "swebench_verified": 479
+  },
+  "filtered_counts": {
+    "gsm8k": {},
+    "hotpotqa": {},
+    "math": {},
+    "mbpp": {},
+    "mmlu_pro": {},
+    "strategyqa": {},
+    "swebench_verified": {
+      "prompt_token_limit": 21
+    }
+  },
+  "length_filter": {
+    "enabled": true,
+    "prompt_plus_max_tokens_limit_inclusive": 15500,
+    "prompt_token_limit_exclusive": 14000,
+    "templates_dir": "C:\\Users\\micavro\\Desktop\\cs研究\\mfe-mfe-ascend\\mfe-ascend\\templates",
+    "token_counter": "tokenizer",
+    "tokenizer_path": "C:\\Users\\micavro\\Desktop\\cs研究\\mfe-mfe-ascend\\remote_tokenizers\\Llama-3.1-8B-Instruct"
+  },
   "mixed_count": 700,
   "mixed_order": "global_random_shuffle",
   "output_length": "medium",
