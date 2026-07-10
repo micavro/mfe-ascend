@@ -24,6 +24,7 @@ Options:
   --num N                     default: 20
   --scheduler fcfs|sjf|eager|sailp  default: current MFE_SCHEDULER or fcfs
   --output-length short|medium|long
+  --output-max-tokens N       override generated tokens per DAG op
   --repeat N                  experiment repeats, default: 1
   --send-interval SECONDS
   --arrival-mode fixed|poisson-burst
@@ -60,6 +61,7 @@ YAML_FILE="adv_reason_3.yaml"
 NUM="20"
 SCHEDULER="${MFE_SCHEDULER:-fcfs}"
 OUTPUT_LENGTH="medium"
+OUTPUT_MAX_TOKENS="${MFE_OUTPUT_MAX_TOKENS:-}"
 REPEAT="1"
 SEND_INTERVAL="0"
 ARRIVAL_MODE="fixed"
@@ -142,6 +144,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --output-length)
       OUTPUT_LENGTH="$2"
+      shift 2
+      ;;
+    --output-max-tokens)
+      OUTPUT_MAX_TOKENS="$2"
       shift 2
       ;;
     --repeat)
@@ -247,6 +253,9 @@ fi
 if [[ -n "$GPU_MEMORY_UTILIZATION" ]]; then
   export MFE_GPU_MEMORY_UTILIZATION="$GPU_MEMORY_UTILIZATION"
 fi
+if [[ -n "$OUTPUT_MAX_TOKENS" ]]; then
+  export MFE_OUTPUT_MAX_TOKENS="$OUTPUT_MAX_TOKENS"
+fi
 export MFE_SCHEDULER="$SCHEDULER"
 if [[ "$OFFLINE" == "1" || "$OFFLINE" == "true" ]]; then
   export MFE_OFFLINE=1
@@ -304,6 +313,9 @@ fi
 
 if [[ -n "$QUESTIONS_FILE" ]]; then
   EXP_ARGS=(--questions-file "$QUESTIONS_FILE" --scheduler "$SCHEDULER" --output-length "$OUTPUT_LENGTH" --repeat "$REPEAT" --send-interval "$SEND_INTERVAL" --arrival-mode "$ARRIVAL_MODE" --poisson-rate "$POISSON_RATE" --arrival-seed "$ARRIVAL_SEED" --templates-dir "$TEMPLATES_DIR" --data-dir "$DATA_DIR" --accelerator "$ACCELERATOR")
+  if [[ -n "$OUTPUT_MAX_TOKENS" ]]; then
+    EXP_ARGS+=(--output-max-tokens "$OUTPUT_MAX_TOKENS")
+  fi
   if [[ -n "$ARRIVAL_BATCH_SIZE" ]]; then
     EXP_ARGS+=(--arrival-batch-size "$ARRIVAL_BATCH_SIZE")
   fi

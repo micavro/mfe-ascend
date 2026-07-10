@@ -351,10 +351,11 @@ def write_brief_outputs(output_dir: str, summaries: List[Dict[str, Any]]) -> Non
 
 
 def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_index: int, run_info: Dict[str, Any]) -> Dict[str, Any]:
+    output_max_tokens = int(args.output_max_tokens or OUTPUT_TOKENS[args.output_length])
     os.environ["MFE_SCHEDULER"] = args.scheduler
-    os.environ["MFE_OUTPUT_MAX_TOKENS"] = str(OUTPUT_TOKENS[args.output_length])
+    os.environ["MFE_OUTPUT_MAX_TOKENS"] = str(output_max_tokens)
     if args.test_worker:
-        os.environ["MFE_TEST_OUTPUT_TOKENS"] = str(OUTPUT_TOKENS[args.output_length])
+        os.environ["MFE_TEST_OUTPUT_TOKENS"] = str(output_max_tokens)
     if args.worker_delay is not None:
         os.environ["MFE_TEST_WORKER_DELAY"] = str(args.worker_delay)
     if args.verbose:
@@ -392,7 +393,7 @@ def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_i
         "repeat_index": repeat_index,
         "questions_file": args.questions_file,
         "output_length": args.output_length,
-        "output_max_tokens": OUTPUT_TOKENS[args.output_length],
+        "output_max_tokens": output_max_tokens,
         "test_worker": bool(args.test_worker),
         "send_interval": args.send_interval,
         "arrival_mode": args.arrival_mode,
@@ -421,6 +422,7 @@ def main() -> None:
     p.add_argument("--questions-file", required=True)
     p.add_argument("--scheduler", choices=("fcfs", "sjf", "eager", "sailp"), default="fcfs")
     p.add_argument("--output-length", choices=sorted(OUTPUT_TOKENS), default="medium")
+    p.add_argument("--output-max-tokens", type=int, default=None, help="override the max generated tokens for every DAG op")
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--templates-dir", default="templates")
     p.add_argument("--output-dir", default=None)
@@ -439,6 +441,8 @@ def main() -> None:
     p.add_argument("--offline", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
+    if args.output_max_tokens is not None and args.output_max_tokens <= 0:
+        raise SystemExit("--output-max-tokens must be positive")
     if args.arrival_mode == "poisson-batch":
         args.arrival_mode = "poisson-burst"
 
