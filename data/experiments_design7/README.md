@@ -7,10 +7,15 @@ selected rows, so arrivals are not grouped by dataset A, then dataset B, etc.
 Generation command:
 
 ```bash
-python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments_design7 --size first50 --output-length medium --seed 20260709
-python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments_design7 --size first100 --output-length medium --seed 20260709
-python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments_design7 --size first200 --output-length medium --seed 20260709
+python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments_design7 --templates-dir templates --tokenizer-path /data2/lhy/flow/models/Llama-3.1-8B-Instruct --prompt-token-limit 14000 --prompt-plus-max-tokens-limit 15500 --size first50 --output-length medium --seed 20260709
+python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments_design7 --templates-dir templates --tokenizer-path /data2/lhy/flow/models/Llama-3.1-8B-Instruct --prompt-token-limit 14000 --prompt-plus-max-tokens-limit 15500 --size first100 --output-length medium --seed 20260709
+python -m mfe.scripts.build_experiment_datasets --data-dir data --output-dir data/experiments_design7 --templates-dir templates --tokenizer-path /data2/lhy/flow/models/Llama-3.1-8B-Instruct --prompt-token-limit 14000 --prompt-plus-max-tokens-limit 15500 --size first200 --output-length medium --seed 20260709
 ```
+
+The prompt-length filter is applied before random per-dataset sampling.  A
+candidate is excluded when its start-node prompt has `>= 14000` tokens or when
+`start-node prompt tokens + start-node max_tokens > 15500`, using the same
+model tokenizer and chat template as the vLLM run.
 
 Dataset to DAG mapping:
 

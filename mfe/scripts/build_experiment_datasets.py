@@ -9,8 +9,9 @@ import json
 import os
 import random
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Tuple
 
+from mfe.parser import build_ops_from_config, load_config
 from mfe.scripts.process_datasets import PROCESSORS, _to_json_safe
 
 
@@ -145,6 +146,120 @@ def read_jsonl(path: str) -> List[Dict[str, Any]]:
     return rows
 
 
+class PromptLengthFilter:
+    """Filter candidate records before sampling a fixed workload."""
+
+    def __init__(
+        self,
+        *,
+        templates_dir: str,
+        tokenizer_path: str | None,
+        prompt_token_limit: int | None,
+        prompt_plus_max_tokens_limit: int | None,
+    ) -> None:
+        self.templates_dir = os.path.abspath(templates_dir)
+        self.tokenizer_path = tokenizer_path
+        self.prompt_token_limit = prompt_token_limit
+        self.prompt_plus_max_tokens_limit = prompt_plus_max_tokens_limit
+        self.enabled = prompt_token_limit is not None or prompt_plus_max_tokens_limit is not None
+        self.tokenizer = None
+        self._start_op_cache: Dict[str, List[Any]] = {}
+
+        if tokenizer_path:
+            from transformers import AutoTokenizer
+
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True)
+        elif self.enabled:
+            print(
+                "warning: prompt length filter enabled without --tokenizer-path; "
+                "falling back to char/4 token estimates",
+                flush=True,
+            )
+
+    def start_ops(self, yaml_name: str) -> List[Any]:
+        if yaml_name not in self._start_op_cache:
+            config_path = os.path.join(self.templates_dir, yaml_name)
+            config = load_config(config_path)
+            _, start_ops, _, _ = build_ops_from_config(config)
+            self._start_op_cache[yaml_name] = start_ops
+        return self._start_op_cache[yaml_name]
+
+    def prompt_tokens(self, *, system_prompt: str, user_prompt: str) -> int:
+        if self.tokenizer is None:
+            header = system_prompt.strip()
+            text = f"{header}\n\n{user_prompt}" if header else user_prompt
+            return estimate_tokens(text)
+
+        if hasattr(self.tokenizer, "apply_chat_template"):
+            rendered = self.tokenizer.apply_chat_template(
+                [
+                    {"role": "system", "content": system_prompt or ""},
+                    {"role": "user", "content": user_prompt or ""},
+                ],
+                tokenize=False,
+                add_generation_prompt=False,
+            )
+        else:
+            header = system_prompt.strip()
+            rendered = f"{header}\n\n{user_prompt}" if header else user_prompt
+        return len(self.tokenizer.encode(rendered, add_special_tokens=False))
+
+    def evaluate(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.enabled:
+            return {}
+
+        prompt = str(record.get("question", "") or "")
+        yaml_name = str(record.get("yaml", "") or "")
+        start_stats: List[Tuple[str, int, int, int]] = []
+        for op in self.start_ops(yaml_name):
+            cfg = getattr(op, "model_config", None)
+            system_prompt = str(getattr(cfg, "system_prompt", "") or "")
+            op_max_tokens = int(getattr(cfg, "max_tokens", 0) or 0)
+            tokens = self.prompt_tokens(system_prompt=system_prompt, user_prompt=prompt)
+            start_stats.append((str(op.id), tokens, op_max_tokens, tokens + op_max_tokens))
+
+        if not start_stats:
+            return {
+                "prompt_tokens_start_max": 0,
+                "prompt_plus_start_op_max_tokens": 0,
+                "start_op_max_tokens": 0,
+                "start_ops": [],
+            }
+
+        return {
+            "prompt_tokens_start_max": max(item[1] for item in start_stats),
+            "prompt_plus_start_op_max_tokens": max(item[3] for item in start_stats),
+            "start_op_max_tokens": max(item[2] for item in start_stats),
+            "start_ops": [item[0] for item in start_stats],
+        }
+
+    def apply(self, record: Dict[str, Any]) -> Tuple[bool, str | None]:
+        stats = self.evaluate(record)
+        if stats:
+            record.update(stats)
+
+        if not self.enabled:
+            return True, None
+
+        prompt_tokens = int(stats.get("prompt_tokens_start_max", 0))
+        prompt_plus_max = int(stats.get("prompt_plus_start_op_max_tokens", 0))
+        if self.prompt_token_limit is not None and prompt_tokens >= self.prompt_token_limit:
+            return False, "prompt_token_limit"
+        if self.prompt_plus_max_tokens_limit is not None and prompt_plus_max > self.prompt_plus_max_tokens_limit:
+            return False, "prompt_plus_max_tokens_limit"
+        return True, None
+
+    def manifest(self) -> Dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "tokenizer_path": self.tokenizer_path,
+            "templates_dir": self.templates_dir,
+            "prompt_token_limit_exclusive": self.prompt_token_limit,
+            "prompt_plus_max_tokens_limit_inclusive": self.prompt_plus_max_tokens_limit,
+            "token_counter": "tokenizer" if self.tokenizer is not None else "estimate_chars_div_4",
+        }
+
+
 BUILTIN_TINY_ROWS: List[Dict[str, str]] = [
     {
         "dataset": "builtin_math",
@@ -236,28 +351,51 @@ def build(args: argparse.Namespace) -> None:
     data_dir = os.path.abspath(args.data_dir)
     out_dir = os.path.abspath(args.output_dir)
     per_dataset = args.per_dataset or SIZE_PRESETS[args.size]
-    load_limit = args.load_limit or max(per_dataset * 4, per_dataset)
+    length_filter = PromptLengthFilter(
+        templates_dir=args.templates_dir,
+        tokenizer_path=args.tokenizer_path,
+        prompt_token_limit=args.prompt_token_limit,
+        prompt_plus_max_tokens_limit=args.prompt_plus_max_tokens_limit,
+    )
+    load_limit = args.load_limit
+    if load_limit is None and not length_filter.enabled:
+        load_limit = max(per_dataset * 4, per_dataset)
 
     all_records: List[Dict[str, Any]] = []
     by_dataset: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    candidate_counts: Dict[str, int] = {}
+    eligible_counts: Dict[str, int] = {}
+    filtered_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for dataset in args.datasets:
         dataset = dataset.lower()
         rows = load_dataset_rows(data_dir, dataset, load_limit)
         rows = [r for r in rows if str(r.get("question", "") or "").strip()]
-        if len(rows) < per_dataset:
-            print(f"{dataset}: only {len(rows)} usable rows, skip size={args.size} need={per_dataset}")
+        candidate_counts[dataset] = len(rows)
+        candidates: List[Dict[str, Any]] = []
+        for i, row in enumerate(rows):
+            record = make_record(row, dataset=dataset, index=i, output_length=args.output_length)
+            keep, reason = length_filter.apply(record)
+            if keep:
+                candidates.append(record)
+            else:
+                filtered_counts[dataset][str(reason)] += 1
+        eligible_counts[dataset] = len(candidates)
+        if len(candidates) < per_dataset:
+            print(
+                f"{dataset}: only {len(candidates)} eligible rows after filters, "
+                f"skip size={args.size} need={per_dataset} candidates={len(rows)}"
+            )
             continue
         if args.selection == "random":
-            rng.shuffle(rows)
-        selected = rows[:per_dataset]
-        records = [
-            make_record(r, dataset=dataset, index=i, output_length=args.output_length)
-            for i, r in enumerate(selected)
-        ]
+            rng.shuffle(candidates)
+        records = candidates[:per_dataset]
         by_dataset[dataset] = records
         all_records.extend(records)
         path = os.path.join(out_dir, f"{dataset}_{args.output_length}_{args.size}.jsonl")
-        print(f"{dataset}: {write_jsonl(path, records)} rows -> {path}")
+        print(
+            f"{dataset}: {write_jsonl(path, records)} rows -> {path} "
+            f"(eligible={len(candidates)} candidates={len(rows)} filtered={sum(filtered_counts[dataset].values())})"
+        )
 
     rng.shuffle(all_records)
     mixed_path = os.path.join(out_dir, f"mixed_{args.output_length}_{args.size}.jsonl")
@@ -271,8 +409,12 @@ def build(args: argparse.Namespace) -> None:
         "mixed_order": "global_random_shuffle",
         "datasets": args.datasets,
         "counts": {k: len(v) for k, v in by_dataset.items()},
+        "candidate_counts": candidate_counts,
+        "eligible_counts": eligible_counts,
+        "filtered_counts": {k: dict(v) for k, v in filtered_counts.items()},
+        "length_filter": length_filter.manifest(),
         "skipped": {
-            dataset: f"fewer than {per_dataset} usable rows"
+            dataset: f"fewer than {per_dataset} eligible rows"
             for dataset in args.datasets
             if dataset.lower() not in by_dataset
         },
@@ -299,6 +441,15 @@ def main() -> None:
     p.add_argument("--output-length", choices=("short", "medium", "long"), default="medium")
     p.add_argument("--selection", choices=("first", "random"), default="random", help="select first N rows or random N rows per dataset before global shuffle")
     p.add_argument("--seed", type=int, default=20260707)
+    p.add_argument("--templates-dir", default="templates", help="template root used for prompt-length filtering")
+    p.add_argument("--tokenizer-path", default=None, help="Hugging Face tokenizer/model path for exact prompt token filtering")
+    p.add_argument("--prompt-token-limit", type=int, default=None, help="drop candidates with start prompt tokens >= this limit")
+    p.add_argument(
+        "--prompt-plus-max-tokens-limit",
+        type=int,
+        default=None,
+        help="drop candidates with start prompt tokens plus start-op max_tokens above this limit",
+    )
     p.add_argument("--builtin-tiny", action="store_true", help="build a small built-in workload without external datasets")
     args = p.parse_args()
     if args.builtin_tiny:
