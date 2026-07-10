@@ -9,24 +9,55 @@ from mfe.workers.worker_test import TestWorker
 
 
 class PromptContractTest(unittest.TestCase):
-    def test_build_prompt_uses_only_direct_parent_generated_outputs(self) -> None:
+    def test_build_prompt_includes_deduplicated_ancestor_outputs_in_dag_order(self) -> None:
         optimizer = object.__new__(MultiRequestOptimizer)
         query = Query("q1", "ROOT QUESTION", template="bench/example.yaml")
         query.op_output = {
-            "ancestor": "ANCESTOR OUTPUT SHOULD NOT BE INCLUDED",
-            "parent": "PARENT GENERATED OUTPUT",
+            "root": "root generated context",
+            "shared": "shared generated context",
+            "left_mid": "left middle generated context",
+            "left_parent": "left parent generated context",
+            "right_mid": "right middle generated context",
+            "right_parent": "right parent generated context",
+            "third_parent": "third parent generated context",
         }
         optimizer.requests = {"q1": query}
 
-        parent = Operator(id="parent")
+        root = Operator(id="root")
+        shared = Operator(id="shared")
+        left_mid = Operator(id="left_mid")
+        right_mid = Operator(id="right_mid")
+        left_parent = Operator(id="left_parent")
+        right_parent = Operator(id="right_parent")
+        third_parent = Operator(id="third_parent")
         child = Operator(id="child")
-        child.input_ops = [parent]
+        shared.input_ops = [root]
+        left_mid.input_ops = [shared]
+        right_mid.input_ops = [shared]
+        left_parent.input_ops = [left_mid]
+        right_parent.input_ops = [right_mid]
+        third_parent.input_ops = [root]
+        child.input_ops = [left_parent, right_parent, third_parent]
 
         prompt = optimizer._build_prompt("q1", child)
 
-        self.assertIn("ROOT QUESTION", prompt)
-        self.assertIn("[parent output]\nPARENT GENERATED OUTPUT", prompt)
-        self.assertNotIn("ANCESTOR OUTPUT SHOULD NOT BE INCLUDED", prompt)
+        expected_order = [
+            "ROOT QUESTION",
+            "[root output]\nroot generated context",
+            "[shared output]\nshared generated context",
+            "[left_mid output]\nleft middle generated context",
+            "[left_parent output]\nleft parent generated context",
+            "[right_mid output]\nright middle generated context",
+            "[right_parent output]\nright parent generated context",
+            "[third_parent output]\nthird parent generated context",
+        ]
+        cursor = -1
+        for expected in expected_order:
+            pos = prompt.find(expected)
+            self.assertGreater(pos, cursor, expected)
+            cursor = pos
+        self.assertEqual(1, prompt.count("[root output]"))
+        self.assertEqual(1, prompt.count("[shared output]"))
 
     def test_resolve_template_path_prefers_templates_dir_for_relative_paths(self) -> None:
         optimizer = object.__new__(MultiRequestOptimizer)

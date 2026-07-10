@@ -363,15 +363,35 @@ class MultiRequestOptimizer:
         fallback_candidates.sort(key=lambda x: x[0])
         return [(uid, op) for _, uid, op in fallback_candidates]
 
+    def _prompt_context_ops(self, op: Operator) -> List[Operator]:
+        ordered: List[Operator] = []
+        visited: Set[str] = set()
+        visiting: Set[str] = set()
+
+        def visit(node: Operator) -> None:
+            node_id = str(node.id)
+            if node_id in visited or node_id in visiting:
+                return
+            visiting.add(node_id)
+            for parent in node.input_ops:
+                visit(parent)
+            visiting.remove(node_id)
+            visited.add(node_id)
+            ordered.append(node)
+
+        for parent in op.input_ops:
+            visit(parent)
+        return ordered
+
     def _build_prompt(self, uid: str, op: Operator) -> str:
         q = self.requests[uid]
         parts: List[str] = []
         if q.prompt:
             parts.append(q.prompt.strip())
-        for inp in op.input_ops:
-            parent_output = q.op_output.get(inp.id, "")
-            if parent_output:
-                parts.append(f"[{inp.id} output]\n{parent_output.strip()}")
+        for ctx_op in self._prompt_context_ops(op):
+            output = q.op_output.get(ctx_op.id, "")
+            if output:
+                parts.append(f"[{ctx_op.id} output]\n{output.strip()}")
         return "\n\n".join(parts)
 
     def _handle_worker_result(self, worker_id: int, msg: Any, uid: str, op: Operator) -> None:
