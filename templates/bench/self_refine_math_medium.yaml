@@ -1,33 +1,51 @@
-start_ops: [draft]
+start_ops: [start]
 end_ops: [final]
 ops:
+  start:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Read the competition math problem, identify the topic, givens, target result, and likely edge cases."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [draft]
   draft:
     model: "${MFE_MODEL_PATH}"
     prompt: "Draft a complete mathematical solution with all important derivation steps."
     max_tokens: 1536
-    input_ops: []
-    output_ops: [critic]
-  critic:
+    input_ops: [start]
+    output_ops: [critic_1]
+  critic_1:
     model: "${MFE_MODEL_PATH}"
-    prompt: "Critique the draft solution, focusing on invalid transformations, missing cases, and arithmetic errors."
+    prompt: "Critique round 1: check the draft for invalid transformations, missing cases, and arithmetic errors."
     max_tokens: 1024
     input_ops: [draft]
-    output_ops: [revise]
-  revise:
+    output_ops: [revise_1]
+  revise_1:
     model: "${MFE_MODEL_PATH}"
-    prompt: "Revise the solution using the critique and make the corrected derivation explicit."
+    prompt: "Revise round 1: fix the solution using the first critique and make the corrected derivation explicit."
     max_tokens: 1536
-    input_ops: [critic]
-    output_ops: [verify]
-  verify:
+    input_ops: [critic_1]
+    output_ops: [critic_2]
+  critic_2:
     model: "${MFE_MODEL_PATH}"
-    prompt: "Verify the revised solution against the original problem and extract the final result."
+    prompt: "Critique round 2: re-check the revised solution for hidden assumptions, boundary cases, and final-answer format."
     max_tokens: 1024
-    input_ops: [revise]
+    input_ops: [revise_1]
+    output_ops: [revise_2]
+  revise_2:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Revise round 2: incorporate the second critique and produce a clean final derivation."
+    max_tokens: 1536
+    input_ops: [critic_2]
+    output_ops: [critic_3]
+  critic_3:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Final critique: verify the clean derivation against the original problem and extract the final result."
+    max_tokens: 1024
+    input_ops: [revise_2]
     output_ops: [final]
   final:
     model: "${MFE_MODEL_PATH}"
     prompt: "Return the final answer only."
     max_tokens: 256
-    input_ops: [verify]
+    input_ops: [critic_3]
     output_ops: []

@@ -20,10 +20,10 @@ DATASET_DAG_MAP: Dict[str, str] = {
     "mmlu_pro": "debate_mmlu_pro",
     "math": "self_refine_math",
     "mbpp": "plan_code_test_mbpp",
+    "hotpotqa": "parallel_debate_mapreduce_hotpotqa",
     "gpqa_diamond": "research_panel_gpqa_diamond",
     "swebench_verified": "agentic_repair_swebench_verified",
     "drop": "fork_join_k",
-    "hotpotqa": "tree_reduce_kd",
 }
 
 DEFAULT_YAML_BY_FAMILY: Dict[str, str] = {
@@ -32,6 +32,7 @@ DEFAULT_YAML_BY_FAMILY: Dict[str, str] = {
     "debate_mmlu_pro": "bench/debate_mmlu_pro_medium.yaml",
     "self_refine_math": "bench/self_refine_math_medium.yaml",
     "plan_code_test_mbpp": "bench/plan_code_test_mbpp_medium.yaml",
+    "parallel_debate_mapreduce_hotpotqa": "bench/parallel_debate_mapreduce_hotpotqa_medium.yaml",
     "research_panel_gpqa_diamond": "bench/research_panel_gpqa_diamond_medium.yaml",
     "agentic_repair_swebench_verified": "bench/agentic_repair_swebench_verified_medium.yaml",
     "path_n": "bench/path_4_medium.yaml",
@@ -289,7 +290,7 @@ def main() -> None:
     p.add_argument(
         "--datasets",
         nargs="+",
-        default=["gsm8k", "strategyqa", "mmlu_pro", "math", "mbpp", "gpqa_diamond", "swebench_verified"],
+        default=["gsm8k", "strategyqa", "mmlu_pro", "math", "mbpp", "hotpotqa", "swebench_verified"],
     )
     p.add_argument("--size", choices=sorted(SIZE_PRESETS), default="smoke")
     p.add_argument("--per-dataset", type=int, default=None)

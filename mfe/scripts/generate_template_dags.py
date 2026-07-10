@@ -22,7 +22,7 @@ BENCH_BASIC_ORDER = [
 ]
 
 BENCH_COMPLEX_ORDER = [
-    "bench/research_panel_gpqa_diamond_medium.yaml",
+    "bench/parallel_debate_mapreduce_hotpotqa_medium.yaml",
     "bench/agentic_repair_swebench_verified_medium.yaml",
 ]
 
@@ -34,8 +34,9 @@ BENCH_DAG_TYPES = {
     "bench/chain_gsm8k_medium.yaml": "线性链式推理",
     "bench/branch_verify_strategyqa_medium.yaml": "隐式分解 + 双分支校验",
     "bench/debate_mmlu_pro_medium.yaml": "多路并行辩论 + 裁决",
-    "bench/self_refine_math_medium.yaml": "草稿 - 批改 - 修正",
+    "bench/self_refine_math_medium.yaml": "两轮数学自我批改",
     "bench/plan_code_test_mbpp_medium.yaml": "计划 - 代码 - 测试",
+    "bench/parallel_debate_mapreduce_hotpotqa_medium.yaml": "四路并行 + 辩论 + Map-Reduce",
     "bench/research_panel_gpqa_diamond_medium.yaml": "专家组 + 证据 + 辩论 + 反思",
     "bench/agentic_repair_swebench_verified_medium.yaml": "定位 + 双补丁 + 测试选择",
 }
@@ -55,11 +56,15 @@ BENCH_DATASET_NOTES = {
     ),
     "bench/self_refine_math_medium.yaml": (
         "MATH",
-        "竞赛数学题更容易出现推导漏洞，适合用批改和修正节点提高稳健性。",
+        "竞赛数学题容易出现推导漏洞；两轮 critic/revise 更贴近人工反复验算。",
     ),
     "bench/plan_code_test_mbpp_medium.yaml": (
         "MBPP",
         "小型 Python 编程题带自然语言需求和测试，适合计划、实现、测试审查。",
+    ),
+    "bench/parallel_debate_mapreduce_hotpotqa_medium.yaml": (
+        "HotpotQA",
+        "多文档多跳问答；四路证据分析后辩论，再把答案、证据、推理和一致性检查 Map-Reduce 汇总。",
     ),
     "bench/research_panel_gpqa_diamond_medium.yaml": (
         "GPQA Diamond",
@@ -184,6 +189,7 @@ def choose_overview_orientation(rel_yaml: str, ops: dict[str, dict[str, Any]], e
         "bench/chain_gsm8k_medium.yaml",
         "bench/self_refine_math_medium.yaml",
         "bench/plan_code_test_mbpp_medium.yaml",
+        "bench/parallel_debate_mapreduce_hotpotqa_medium.yaml",
     }:
         return "horizontal"
     depth, width = layer_stats(ops, edges)

@@ -12,8 +12,8 @@ The combined bench overview uses the redesigned DAG set documented in `bench/dag
 | `templates/bench/branch_verify_strategyqa_medium.yaml` | `bench/branch_verify_strategyqa_medium.tex` | `bench/branch_verify_strategyqa_medium.pdf` |
 | `templates/bench/chain_gsm8k_medium.yaml` | `bench/chain_gsm8k_medium.tex` | `bench/chain_gsm8k_medium.pdf` |
 | `templates/bench/debate_mmlu_pro_medium.yaml` | `bench/debate_mmlu_pro_medium.tex` | `bench/debate_mmlu_pro_medium.pdf` |
+| `templates/bench/parallel_debate_mapreduce_hotpotqa_medium.yaml` | `bench/parallel_debate_mapreduce_hotpotqa_medium.tex` | `bench/parallel_debate_mapreduce_hotpotqa_medium.pdf` |
 | `templates/bench/plan_code_test_mbpp_medium.yaml` | `bench/plan_code_test_mbpp_medium.tex` | `bench/plan_code_test_mbpp_medium.pdf` |
-| `templates/bench/research_panel_gpqa_diamond_medium.yaml` | `bench/research_panel_gpqa_diamond_medium.tex` | `bench/research_panel_gpqa_diamond_medium.pdf` |
 | `templates/bench/self_refine_math_medium.yaml` | `bench/self_refine_math_medium.tex` | `bench/self_refine_math_medium.pdf` |
 
 Regenerate diagrams with:

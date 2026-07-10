@@ -1,7 +1,7 @@
 {
   "counts": {
-    "gpqa_diamond": 50,
     "gsm8k": 50,
+    "hotpotqa": 50,
     "math": 50,
     "mbpp": 50,
     "mmlu_pro": 50,
@@ -14,7 +14,7 @@
     "mmlu_pro",
     "math",
     "mbpp",
-    "gpqa_diamond",
+    "hotpotqa",
     "swebench_verified"
   ],
   "mixed_count": 350,

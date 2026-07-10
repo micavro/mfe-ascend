@@ -1,0 +1,52 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usetikzlibrary{arrows.meta,positioning}
+\begin{document}
+\begin{tikzpicture}[>=Latex, scale=0.92, transform shape,
+  op/.style={circle, draw, align=center, minimum size=11mm, inner sep=0pt, font=\scriptsize, fill=white},
+  start/.style={op, fill=green!12, draw=green!45!black},
+  end/.style={op, fill=red!10, draw=red!45!black},
+  startend/.style={op, fill=yellow!16, draw=orange!55!black},
+  edge/.style={->, line width=0.45pt, draw=black!70}
+]
+\node[font=\small\bfseries, align=center] at (0,0.95) {bench/parallel\_debate\_mapreduce\_hotpotqa\_medium.yaml\\[-1pt]{\scriptsize 14 ops, 23 edges}};
+\node[start] (n0) at (0.00,0.00) {\texttt{rea}};
+\node[op] (n1) at (-1.80,-1.90) {\texttt{be}};
+\node[op] (n2) at (1.80,-1.90) {\texttt{ce}};
+\node[op] (n3) at (-5.40,-1.90) {\texttt{ae}};
+\node[op] (n4) at (5.40,-1.90) {\texttt{df}};
+\node[op] (n5) at (-1.80,-3.80) {\texttt{aa}};
+\node[op] (n6) at (1.80,-3.80) {\texttt{as}};
+\node[op] (n7) at (0.00,-5.70) {\texttt{dm}};
+\node[op] (n8) at (-5.40,-7.60) {\texttt{ma}};
+\node[op] (n9) at (5.40,-7.60) {\texttt{ms}};
+\node[op] (n10) at (1.80,-7.60) {\texttt{mr}};
+\node[op] (n11) at (-1.80,-7.60) {\texttt{mc}};
+\node[op] (n12) at (0.00,-9.50) {\texttt{red}};
+\node[end] (n13) at (0.00,-11.40) {\texttt{fin}};
+\draw[edge] (n5) -- (n7);
+\draw[edge] (n3) -- (n5);
+\draw[edge] (n3) -- (n6);
+\draw[edge] (n6) -- (n7);
+\draw[edge] (n1) -- (n5);
+\draw[edge] (n1) -- (n6);
+\draw[edge] (n2) -- (n5);
+\draw[edge] (n2) -- (n6);
+\draw[edge] (n7) -- (n8);
+\draw[edge] (n7) -- (n11);
+\draw[edge] (n7) -- (n10);
+\draw[edge] (n7) -- (n9);
+\draw[edge] (n4) -- (n5);
+\draw[edge] (n4) -- (n6);
+\draw[edge] (n8) -- (n12);
+\draw[edge] (n11) -- (n12);
+\draw[edge] (n10) -- (n12);
+\draw[edge] (n9) -- (n12);
+\draw[edge] (n0) -- (n3);
+\draw[edge] (n0) -- (n1);
+\draw[edge] (n0) -- (n2);
+\draw[edge] (n0) -- (n4);
+\draw[edge] (n12) -- (n13);
+\node[start, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (-1.50,-12.35) {start};
+\node[end, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (1.50,-12.35) {end};
+\end{tikzpicture}
+\end{document}

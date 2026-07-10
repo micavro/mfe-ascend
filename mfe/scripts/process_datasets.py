@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 def _to_json_safe(obj: Any) -> Any:
     """将 numpy 等类型转为 JSON 可序列化格式。"""
     if hasattr(obj, "tolist"):
-        return obj.tolist()
+        return _to_json_safe(obj.tolist())
     if hasattr(obj, "item"):
         return obj.item()
     if isinstance(obj, dict):
@@ -54,7 +54,18 @@ def process_hotpotqa(data_dir: str, limit: int | None) -> List[Dict[str, Any]]:
         question_short = row_d.get("question", "") or ""
         row_d["question_short"] = question_short
         ctx = row_d.get("context", "")
-        if isinstance(ctx, list):
+        if isinstance(ctx, dict):
+            titles = ctx.get("title", []) or []
+            sentence_groups = ctx.get("sentences", []) or []
+            parts = []
+            for title, sents in zip(titles, sentence_groups):
+                if isinstance(sents, list):
+                    text = " ".join(str(s).strip() for s in sents)
+                else:
+                    text = str(sents).strip()
+                parts.append(f"[{title}]\n{text}")
+            ctx_str = "\n\n".join(parts)
+        elif isinstance(ctx, list):
             parts = []
             for item in ctx:
                 if isinstance(item, dict):

@@ -19,7 +19,7 @@ Dataset to DAG mapping:
 | `mmlu_pro` | `bench/debate_mmlu_pro_medium.yaml` |
 | `math` | `bench/self_refine_math_medium.yaml` |
 | `mbpp` | `bench/plan_code_test_mbpp_medium.yaml` |
-| `gpqa_diamond` | `bench/research_panel_gpqa_diamond_medium.yaml` |
+| `hotpotqa` | `bench/parallel_debate_mapreduce_hotpotqa_medium.yaml` |
 | `swebench_verified` | `bench/agentic_repair_swebench_verified_medium.yaml` |
 
 Counts:
@@ -28,6 +28,6 @@ Counts:
 | --- | --- | --- |
 | `first50` | 7 datasets x 50 | 350 |
 | `first100` | 7 datasets x 100 | 700 |
-| `first200` | 6 datasets x 200; `gpqa_diamond` skipped because only 198 rows are available | 1200 |
+| `first200` | 7 datasets x 200 | 1400 |
 
 The companion package is `data/mfe_design7_medium_50_100_200.zip`.

@@ -106,21 +106,27 @@
   startend/.style={op, fill=yellow!16, draw=orange!55!black},
   edge/.style={->, line width=0.35pt, draw=black!65}
 ]
-\node[font=\scriptsize\bfseries, align=center] at (2.16,0.55) {self\_refine\_math\_medium.yaml\\[-1pt]{\tiny 5 ops, 4 edges}};
-\node[start] (n0) at (0.00,-0.00) {dra};
-\node[op] (n1) at (1.08,-0.00) {cri};
-\node[op] (n2) at (2.16,-0.00) {rev};
-\node[op] (n3) at (3.24,-0.00) {ver};
-\node[end] (n4) at (4.32,-0.00) {fin};
-\draw[edge] (n1) -- (n2);
-\draw[edge] (n0) -- (n1);
+\node[font=\scriptsize\bfseries, align=center] at (3.78,0.55) {self\_refine\_math\_medium.yaml\\[-1pt]{\tiny 8 ops, 7 edges}};
+\node[start] (n0) at (0.00,-0.00) {sta};
+\node[op] (n1) at (1.08,-0.00) {dra};
+\node[op] (n2) at (2.16,-0.00) {c1};
+\node[op] (n3) at (3.24,-0.00) {r1};
+\node[op] (n4) at (4.32,-0.00) {c2};
+\node[op] (n5) at (5.40,-0.00) {r2};
+\node[op] (n6) at (6.48,-0.00) {c3};
+\node[end] (n7) at (7.56,-0.00) {fin};
 \draw[edge] (n2) -- (n3);
+\draw[edge] (n4) -- (n5);
+\draw[edge] (n6) -- (n7);
+\draw[edge] (n1) -- (n2);
 \draw[edge] (n3) -- (n4);
+\draw[edge] (n5) -- (n6);
+\draw[edge] (n0) -- (n1);
 \end{tikzpicture}
 \\[-2pt]
-{\scriptsize\bfseries 形态：草稿 - 批改 - 修正}\\
+{\scriptsize\bfseries 形态：两轮数学自我批改}\\
 {\scriptsize\bfseries 数据集：MATH}\\[-1pt]
-{\scriptsize 竞赛数学题更容易出现推导漏洞，适合用批改和修正节点提高稳健性。}
+{\scriptsize 竞赛数学题容易出现推导漏洞；两轮 critic/revise 更贴近人工反复验算。}
 \end{minipage}}
 &
 \fcolorbox{blue!65!black}{blue!2}{\begin{minipage}[t]{6.81cm}
@@ -164,48 +170,49 @@
   startend/.style={op, fill=yellow!16, draw=orange!55!black},
   edge/.style={->, line width=0.35pt, draw=black!65}
 ]
-\node[font=\scriptsize\bfseries, align=center] at (0.00,0.55) {research\_panel\_gpqa\_diamond\_medium.yaml\\[-1pt]{\tiny 16 ops, 20 edges}};
-\node[start] (n0) at (0.00,0.00) {rea};
-\node[op] (n1) at (0.54,-0.76) {rou};
-\node[op] (n2) at (-0.54,-0.76) {pla};
-\node[op] (n3) at (0.00,-1.52) {ea};
-\node[op] (n4) at (1.08,-1.52) {eb};
-\node[op] (n5) at (2.16,-1.52) {ec};
-\node[op] (n6) at (-2.16,-1.52) {der};
-\node[op] (n7) at (-1.08,-1.52) {eli};
-\node[op] (n8) at (0.00,-2.28) {em};
-\node[op] (n9) at (0.00,-3.04) {can};
-\node[op] (n10) at (0.54,-3.80) {pro};
-\node[op] (n11) at (-0.54,-3.80) {con};
-\node[op] (n12) at (0.00,-4.56) {jud};
-\node[op] (n13) at (0.00,-5.32) {dra};
-\node[op] (n14) at (0.00,-6.08) {cri};
-\node[end] (n15) at (0.00,-6.84) {fin};
-\draw[edge] (n9) -- (n11);
-\draw[edge] (n9) -- (n10);
-\draw[edge] (n11) -- (n12);
-\draw[edge] (n14) -- (n15);
-\draw[edge] (n6) -- (n9);
-\draw[edge] (n13) -- (n14);
-\draw[edge] (n7) -- (n9);
-\draw[edge] (n8) -- (n9);
-\draw[edge] (n3) -- (n8);
-\draw[edge] (n4) -- (n8);
-\draw[edge] (n5) -- (n8);
-\draw[edge] (n12) -- (n13);
-\draw[edge] (n2) -- (n6);
-\draw[edge] (n2) -- (n7);
-\draw[edge] (n10) -- (n12);
-\draw[edge] (n0) -- (n2);
-\draw[edge] (n0) -- (n1);
-\draw[edge] (n1) -- (n3);
-\draw[edge] (n1) -- (n4);
+\node[font=\scriptsize\bfseries, align=center] at (3.24,1.69) {parallel\_debate\_mapreduce\_hotpotqa\_medium.yaml\\[-1pt]{\tiny 14 ops, 23 edges}};
+\node[start] (n0) at (0.00,-0.00) {rea};
+\node[op] (n1) at (1.08,0.38) {be};
+\node[op] (n2) at (1.08,-0.38) {ce};
+\node[op] (n3) at (1.08,1.14) {ae};
+\node[op] (n4) at (1.08,-1.14) {df};
+\node[op] (n5) at (2.16,0.38) {aa};
+\node[op] (n6) at (2.16,-0.38) {as};
+\node[op] (n7) at (3.24,-0.00) {dm};
+\node[op] (n8) at (4.32,1.14) {ma};
+\node[op] (n9) at (4.32,-1.14) {ms};
+\node[op] (n10) at (4.32,-0.38) {mr};
+\node[op] (n11) at (4.32,0.38) {mc};
+\node[op] (n12) at (5.40,-0.00) {red};
+\node[end] (n13) at (6.48,-0.00) {fin};
+\draw[edge] (n5) -- (n7);
+\draw[edge] (n3) -- (n5);
+\draw[edge] (n3) -- (n6);
+\draw[edge] (n6) -- (n7);
 \draw[edge] (n1) -- (n5);
+\draw[edge] (n1) -- (n6);
+\draw[edge] (n2) -- (n5);
+\draw[edge] (n2) -- (n6);
+\draw[edge] (n7) -- (n8);
+\draw[edge] (n7) -- (n11);
+\draw[edge] (n7) -- (n10);
+\draw[edge] (n7) -- (n9);
+\draw[edge] (n4) -- (n5);
+\draw[edge] (n4) -- (n6);
+\draw[edge] (n8) -- (n12);
+\draw[edge] (n11) -- (n12);
+\draw[edge] (n10) -- (n12);
+\draw[edge] (n9) -- (n12);
+\draw[edge] (n0) -- (n3);
+\draw[edge] (n0) -- (n1);
+\draw[edge] (n0) -- (n2);
+\draw[edge] (n0) -- (n4);
+\draw[edge] (n12) -- (n13);
 \end{tikzpicture}
 \\[-2pt]
-{\scriptsize\bfseries 形态：专家组 + 证据 + 辩论 + 反思}\\
-{\scriptsize\bfseries 数据集：GPQA Diamond}\\[-1pt]
-{\scriptsize 研究生级科学选择题，难度高，适合多专家证据、选项排除、辩论和反思。}
+{\scriptsize\bfseries 形态：四路并行 + 辩论 + Map-Reduce}\\
+{\scriptsize\bfseries 数据集：HotpotQA}\\[-1pt]
+{\scriptsize 多文档多跳问答；四路证据分析后辩论，再把答案、证据、推理和一致性检查 Map-Reduce 汇总。}
 \end{minipage}}
 &
 \fcolorbox{red!72!black}{red!2}{\begin{minipage}[t]{17.60cm}

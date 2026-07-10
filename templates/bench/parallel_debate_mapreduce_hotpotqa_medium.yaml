@@ -1,0 +1,87 @@
+start_ops: [read]
+end_ops: [final]
+ops:
+  read:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Read the HotpotQA question and all context paragraphs; identify the question type, candidate entities, and what evidence must be linked."
+    max_tokens: 1024
+    input_ops: []
+    output_ops: [bridge_evidence, comparison_evidence, answer_evidence, distractor_filter]
+  bridge_evidence:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Parallel evidence analyst A: find bridge-entity links and supporting paragraphs that connect the question to the answer."
+    max_tokens: 1536
+    input_ops: [read]
+    output_ops: [answer_advocate, answer_skeptic]
+  comparison_evidence:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Parallel evidence analyst B: inspect comparison, date, numeric, and attribute clues that may decide the answer."
+    max_tokens: 1536
+    input_ops: [read]
+    output_ops: [answer_advocate, answer_skeptic]
+  answer_evidence:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Parallel evidence analyst C: extract direct answer-bearing sentences and quote the titles they came from."
+    max_tokens: 1536
+    input_ops: [read]
+    output_ops: [answer_advocate, answer_skeptic]
+  distractor_filter:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Parallel evidence analyst D: identify distractor paragraphs, entity-name traps, and evidence that should not be used."
+    max_tokens: 1536
+    input_ops: [read]
+    output_ops: [answer_advocate, answer_skeptic]
+  answer_advocate:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Debate role: argue for the most likely answer using the strongest linked evidence from the four analysts."
+    max_tokens: 1024
+    input_ops: [bridge_evidence, comparison_evidence, answer_evidence, distractor_filter]
+    output_ops: [debate_moderator]
+  answer_skeptic:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Debate role: challenge the proposed answer, test alternative interpretations, and flag missing supporting facts."
+    max_tokens: 1024
+    input_ops: [bridge_evidence, comparison_evidence, answer_evidence, distractor_filter]
+    output_ops: [debate_moderator]
+  debate_moderator:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Resolve the debate into a provisional answer and specify which evidence chain must be preserved."
+    max_tokens: 1024
+    input_ops: [answer_advocate, answer_skeptic]
+    output_ops: [map_answer, map_support, map_reasoning, map_consistency]
+  map_answer:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Map step 1: produce the shortest answer string that fits the question."
+    max_tokens: 512
+    input_ops: [debate_moderator]
+    output_ops: [reduce]
+  map_support:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Map step 2: list the minimal supporting facts by paragraph title and sentence content."
+    max_tokens: 1024
+    input_ops: [debate_moderator]
+    output_ops: [reduce]
+  map_reasoning:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Map step 3: write the two-hop or multi-hop reasoning chain from evidence to answer."
+    max_tokens: 1024
+    input_ops: [debate_moderator]
+    output_ops: [reduce]
+  map_consistency:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Map step 4: verify that the answer, supporting facts, and reasoning chain are mutually consistent."
+    max_tokens: 1024
+    input_ops: [debate_moderator]
+    output_ops: [reduce]
+  reduce:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Reduce the mapped answer, support, reasoning, and consistency check into one final grounded response."
+    max_tokens: 1024
+    input_ops: [map_answer, map_support, map_reasoning, map_consistency]
+    output_ops: [final]
+  final:
+    model: "${MFE_MODEL_PATH}"
+    prompt: "Return the final answer and one concise evidence sentence."
+    max_tokens: 512
+    input_ops: [reduce]
+    output_ops: []

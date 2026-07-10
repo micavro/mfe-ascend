@@ -8,17 +8,23 @@
   startend/.style={op, fill=yellow!16, draw=orange!55!black},
   edge/.style={->, line width=0.45pt, draw=black!70}
 ]
-\node[font=\small\bfseries, align=center] at (0,0.95) {bench/self\_refine\_math\_medium.yaml\\[-1pt]{\scriptsize 5 ops, 4 edges}};
-\node[start] (n0) at (0.00,0.00) {\texttt{dra}};
-\node[op] (n1) at (0.00,-1.90) {\texttt{cri}};
-\node[op] (n2) at (0.00,-3.80) {\texttt{rev}};
-\node[op] (n3) at (0.00,-5.70) {\texttt{ver}};
-\node[end] (n4) at (0.00,-7.60) {\texttt{fin}};
-\draw[edge] (n1) -- (n2);
-\draw[edge] (n0) -- (n1);
+\node[font=\small\bfseries, align=center] at (0,0.95) {bench/self\_refine\_math\_medium.yaml\\[-1pt]{\scriptsize 8 ops, 7 edges}};
+\node[start] (n0) at (0.00,0.00) {\texttt{sta}};
+\node[op] (n1) at (0.00,-1.90) {\texttt{dra}};
+\node[op] (n2) at (0.00,-3.80) {\texttt{c1}};
+\node[op] (n3) at (0.00,-5.70) {\texttt{r1}};
+\node[op] (n4) at (0.00,-7.60) {\texttt{c2}};
+\node[op] (n5) at (0.00,-9.50) {\texttt{r2}};
+\node[op] (n6) at (0.00,-11.40) {\texttt{c3}};
+\node[end] (n7) at (0.00,-13.30) {\texttt{fin}};
 \draw[edge] (n2) -- (n3);
+\draw[edge] (n4) -- (n5);
+\draw[edge] (n6) -- (n7);
+\draw[edge] (n1) -- (n2);
 \draw[edge] (n3) -- (n4);
-\node[start, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (-1.50,-8.55) {start};
-\node[end, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (1.50,-8.55) {end};
+\draw[edge] (n5) -- (n6);
+\draw[edge] (n0) -- (n1);
+\node[start, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (-1.50,-14.25) {start};
+\node[end, minimum width=0.75cm, minimum height=0.45cm, font=\tiny] at (1.50,-14.25) {end};
 \end{tikzpicture}
 \end{document}
