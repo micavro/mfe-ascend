@@ -268,6 +268,7 @@ def build(args: argparse.Namespace) -> None:
         "size": args.size,
         "per_dataset": per_dataset,
         "output_length": args.output_length,
+        "mixed_order": "global_random_shuffle",
         "datasets": args.datasets,
         "counts": {k: len(v) for k, v in by_dataset.items()},
         "skipped": {

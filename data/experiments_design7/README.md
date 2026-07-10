@@ -1,6 +1,8 @@
 # Design-7 benchmark workloads
 
 This directory contains fixed medium-output JSONL workloads for the redesigned 7-DAG benchmark set.
+The mixed workload order is a deterministic global random shuffle across all
+selected rows, so arrivals are not grouped by dataset A, then dataset B, etc.
 
 Generation command:
 

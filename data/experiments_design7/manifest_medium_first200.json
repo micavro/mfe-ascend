@@ -18,6 +18,7 @@
     "swebench_verified"
   ],
   "mixed_count": 1400,
+  "mixed_order": "global_random_shuffle",
   "output_length": "medium",
   "per_dataset": 200,
   "seed": 20260709,
