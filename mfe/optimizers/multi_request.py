@@ -1,8 +1,7 @@
 """多请求异步优化器。
 
-默认行为保持原来的 eager ready-task 调度；设置 MFE_SCHEDULER=sailp 或
-MFE_ENABLE_SAILP=1 后，提交请求时会运行 SAI-LP admission-time planner，
-调度循环按计划 worker/timeline 派发 ready op。
+默认行为保持原来的 eager ready-task 调度。SAILP 提供 admission-time
+workflow 计划；DARC 和 RH-SAIL 提供 online ready-op 调度。
 """
 
 from __future__ import annotations
@@ -28,6 +27,7 @@ from mfe.util import (
 from mfe.workers import TestWorker, vLLMWorker
 from mfe.optimizers.sailp import SAILPScheduler, SchedulePlan
 from mfe.optimizers.darc import DARCReadyScheduler
+from mfe.optimizers.rhsail import RHSailReadyScheduler
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -109,11 +109,18 @@ class MultiRequestOptimizer:
         self._darc_enabled = scheduler_name in {"darc", "darc-rollout", "dependency-aware"} or _env_bool(
             "MFE_ENABLE_DARC", False
         )
-        if self._darc_enabled:
+        self._rhsail_enabled = scheduler_name in {"rhsail", "rh-sail", "rh_sail"} or _env_bool(
+            "MFE_ENABLE_RHSAIL", False
+        )
+        if self._rhsail_enabled:
+            self._sailp_enabled = False
+            self._darc_enabled = False
+        elif self._darc_enabled:
             self._sailp_enabled = False
         self._sailp_strict = _env_bool("MFE_SAILP_STRICT", False)
         self._sailp_planner: Optional[SAILPScheduler] = None
         self._darc_scheduler: Optional[DARCReadyScheduler] = None
+        self._rhsail_scheduler: Optional[RHSailReadyScheduler] = None
         self._scheduler_overhead_seconds = 0.0
         self._scheduler_decisions = 0
         self._ready_queue_samples: List[int] = []
@@ -121,6 +128,8 @@ class MultiRequestOptimizer:
             self._sailp_planner = SAILPScheduler(num_executors=self.device_cnt, executor_ids=list(range(self.device_cnt)))
         if self._darc_enabled:
             self._darc_scheduler = DARCReadyScheduler(num_workers=self.device_cnt)
+        if self._rhsail_enabled:
+            self._rhsail_scheduler = RHSailReadyScheduler(num_workers=self.device_cnt)
 
         self.cmd_queues: List[mp.Queue] = []
         self.result_queues: List[mp.Queue] = []
@@ -150,8 +159,17 @@ class MultiRequestOptimizer:
             self._backend,
             self.device_cnt,
             self._use_test_worker,
-            "sailp" if self._sailp_enabled else ("darc" if self._darc_enabled else self._scheduler_name),
+            self._scheduler_label(),
         )
+
+    def _scheduler_label(self) -> str:
+        if self._rhsail_enabled:
+            return "rhsail"
+        if self._sailp_enabled:
+            return "sailp"
+        if self._darc_enabled:
+            return "darc"
+        return self._scheduler_name
 
     def _resolve_template_path(self, template: str) -> str:
         t = (template or "").strip()
@@ -207,7 +225,7 @@ class MultiRequestOptimizer:
         uid = str(uuid.uuid4())
         tpl = dag if dag.endswith(".yaml") else f"{dag}.yaml"
         q = Query(id=uid, prompt=input_text or "", template=tpl, metadata=metadata)
-        q.scheduler_name = "sailp" if self._sailp_enabled else ("darc" if self._darc_enabled else self._scheduler_name)
+        q.scheduler_name = self._scheduler_label()
         with self._lock:
             if self._sailp_enabled:
                 self._ensure_schedule_plan(q)
@@ -251,7 +269,7 @@ class MultiRequestOptimizer:
                     "worker_assignments": dict(q.worker_assignments),
                     "op_metrics": dict(q.op_metrics),
                     "schedule_plan": None,
-                    "scheduler": "sailp" if self._sailp_enabled else self._scheduler_name,
+                    "scheduler": self._scheduler_label(),
                     "scheduler_metrics": self._scheduler_snapshot(),
                     "total_answer_time": None,
                     "arrive_time": q.create_time,
@@ -287,7 +305,7 @@ class MultiRequestOptimizer:
 
     def _scheduler_snapshot(self) -> Dict[str, Any]:
         samples = list(self._ready_queue_samples)
-        scheduler_label = "sailp" if self._sailp_enabled else ("darc" if self._darc_enabled else self._scheduler_name)
+        scheduler_label = self._scheduler_label()
         snapshot: Dict[str, Any] = {
             "scheduler": scheduler_label,
             "overhead_seconds": float(self._scheduler_overhead_seconds),
@@ -298,6 +316,8 @@ class MultiRequestOptimizer:
         }
         if self._darc_scheduler is not None:
             snapshot["darc"] = self._darc_scheduler.snapshot()
+        if self._rhsail_scheduler is not None:
+            snapshot["rhsail"] = self._rhsail_scheduler.snapshot()
         return snapshot
 
     def _is_query_complete(self, q: Query) -> bool:
@@ -332,7 +352,7 @@ class MultiRequestOptimizer:
         return self._order_ready_tasks(ready)
 
     def _order_ready_tasks(self, ready: List[Tuple[str, Operator]]) -> List[Tuple[str, Operator]]:
-        if self._sailp_enabled or self._darc_enabled:
+        if self._sailp_enabled or self._darc_enabled or self._rhsail_enabled:
             return ready
         if self._scheduler_name in {"sjf", "shortest-job-first", "short-job-first"}:
             with self._lock:
@@ -353,7 +373,21 @@ class MultiRequestOptimizer:
         - eager/fcfs/sjf: use existing ready ordering.
         - sailp: use admission-time SAI-LP plan.
         - darc: use online dependency-aware rollout scheduler.
+        - rhsail: use completion-aware RHRS rollout with SAIL affinity.
         """
+        if self._rhsail_enabled:
+            with self._lock:
+                ready = self._get_ready_tasks()
+                if self._rhsail_scheduler is None:
+                    return ready
+                return self._rhsail_scheduler.order_ready_tasks(
+                    ready,
+                    worker_id=worker_id,
+                    requests=self.requests,
+                    inflight_tasks=set(self._inflight_tasks),
+                    get_dag=self._get_dag,
+                    now=time.perf_counter(),
+                )
         if self._darc_enabled:
             with self._lock:
                 ready = self._get_ready_tasks()
@@ -500,8 +534,17 @@ class MultiRequestOptimizer:
                             q.step += 1
                             q.status = "running"
                             q.benchmark[op_name] = rec["benchmark"]
-                            if isinstance(rec.get("metrics"), dict):
-                                q.op_metrics[op_name] = rec["metrics"]
+                            rec_metrics = rec.get("metrics")
+                            if isinstance(rec_metrics, dict):
+                                q.op_metrics[op_name] = rec_metrics
+                            if self._rhsail_scheduler is not None:
+                                self._rhsail_scheduler.observe_completion(
+                                    q,
+                                    op_name,
+                                    worker_id=worker_id,
+                                    benchmark=rec["benchmark"],
+                                    metrics=rec_metrics if isinstance(rec_metrics, dict) else None,
+                                )
         elif isinstance(msg, dict) and msg.get("command") == "error":
             err = msg.get("result", {})
             if not isinstance(err, dict):
@@ -549,6 +592,8 @@ class MultiRequestOptimizer:
                     plan_note = f" planned_worker={step.worker_id} reuse={step.reuse_from or 'cold'}"
             elif self._darc_enabled:
                 plan_note = " darc=online"
+            elif self._rhsail_enabled:
+                plan_note = " rhsail=online"
             print(
                 f"[OPT] -> Worker {worker_id} op={op.id} query_ids=[{uid}]{plan_note} "
                 f"t={time.perf_counter():.1f}",

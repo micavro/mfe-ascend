@@ -101,6 +101,10 @@ client-side arrival burst. It does not enable runtime query batching; the runtim
 still dispatches one `(query, operator)` at a time with `query_ids=[uid]`.
 `--poisson-rate` is the burst arrival rate in bursts per second.
 
+Use `--scheduler rhsail` for the completion-oriented online scheduler that
+combines SAIL placement/state-affinity guidance with RHRS-style diverse
+candidate rollout. See `docs/rhsail.md` for its progress and admission guards.
+
 ## Metrics
 
 The experiment runner writes per-run detail JSON, summary JSON, and summary CSV.
