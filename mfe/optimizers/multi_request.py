@@ -27,6 +27,7 @@ from mfe.util import (
 )
 from mfe.workers import TestWorker, vLLMWorker
 from mfe.optimizers.sailp import SAILPScheduler, SchedulePlan
+from mfe.optimizers.darc import DARCReadyScheduler
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -105,13 +106,21 @@ class MultiRequestOptimizer:
         self._sailp_enabled = scheduler_name in {"sail", "sailp", "sai-lp", "state", "state-aware"} or _env_bool(
             "MFE_ENABLE_SAILP", False
         )
+        self._darc_enabled = scheduler_name in {"darc", "darc-rollout", "dependency-aware"} or _env_bool(
+            "MFE_ENABLE_DARC", False
+        )
+        if self._darc_enabled:
+            self._sailp_enabled = False
         self._sailp_strict = _env_bool("MFE_SAILP_STRICT", False)
         self._sailp_planner: Optional[SAILPScheduler] = None
+        self._darc_scheduler: Optional[DARCReadyScheduler] = None
         self._scheduler_overhead_seconds = 0.0
         self._scheduler_decisions = 0
         self._ready_queue_samples: List[int] = []
         if self._sailp_enabled:
             self._sailp_planner = SAILPScheduler(num_executors=self.device_cnt, executor_ids=list(range(self.device_cnt)))
+        if self._darc_enabled:
+            self._darc_scheduler = DARCReadyScheduler(num_workers=self.device_cnt)
 
         self.cmd_queues: List[mp.Queue] = []
         self.result_queues: List[mp.Queue] = []
@@ -141,7 +150,7 @@ class MultiRequestOptimizer:
             self._backend,
             self.device_cnt,
             self._use_test_worker,
-            "sailp" if self._sailp_enabled else "eager",
+            "sailp" if self._sailp_enabled else ("darc" if self._darc_enabled else self._scheduler_name),
         )
 
     def _resolve_template_path(self, template: str) -> str:
@@ -198,7 +207,7 @@ class MultiRequestOptimizer:
         uid = str(uuid.uuid4())
         tpl = dag if dag.endswith(".yaml") else f"{dag}.yaml"
         q = Query(id=uid, prompt=input_text or "", template=tpl, metadata=metadata)
-        q.scheduler_name = "sailp" if self._sailp_enabled else self._scheduler_name
+        q.scheduler_name = "sailp" if self._sailp_enabled else ("darc" if self._darc_enabled else self._scheduler_name)
         with self._lock:
             if self._sailp_enabled:
                 self._ensure_schedule_plan(q)
@@ -278,14 +287,18 @@ class MultiRequestOptimizer:
 
     def _scheduler_snapshot(self) -> Dict[str, Any]:
         samples = list(self._ready_queue_samples)
-        return {
-            "scheduler": "sailp" if self._sailp_enabled else self._scheduler_name,
+        scheduler_label = "sailp" if self._sailp_enabled else ("darc" if self._darc_enabled else self._scheduler_name)
+        snapshot: Dict[str, Any] = {
+            "scheduler": scheduler_label,
             "overhead_seconds": float(self._scheduler_overhead_seconds),
             "decisions": int(self._scheduler_decisions),
             "ready_queue_samples": len(samples),
             "ready_queue_avg": (sum(samples) / len(samples) if samples else 0.0),
             "ready_queue_peak": (max(samples) if samples else 0),
         }
+        if self._darc_scheduler is not None:
+            snapshot["darc"] = self._darc_scheduler.snapshot()
+        return snapshot
 
     def _is_query_complete(self, q: Query) -> bool:
         try:
@@ -319,7 +332,7 @@ class MultiRequestOptimizer:
         return self._order_ready_tasks(ready)
 
     def _order_ready_tasks(self, ready: List[Tuple[str, Operator]]) -> List[Tuple[str, Operator]]:
-        if self._sailp_enabled:
+        if self._sailp_enabled or self._darc_enabled:
             return ready
         if self._scheduler_name in {"sjf", "shortest-job-first", "short-job-first"}:
             with self._lock:
@@ -335,7 +348,25 @@ class MultiRequestOptimizer:
         return ready
 
     def _get_ready_tasks_for_worker(self, worker_id: int) -> List[Tuple[str, Operator]]:
-        """Return ready tasks ordered by SAI-LP plan for a specific idle worker."""
+        """Return ready tasks ordered for a specific idle worker.
+        Modes:
+        - eager/fcfs/sjf: use existing ready ordering.
+        - sailp: use admission-time SAI-LP plan.
+        - darc: use online dependency-aware rollout scheduler.
+        """
+        if self._darc_enabled:
+            with self._lock:
+                ready = self._get_ready_tasks()
+                if self._darc_scheduler is None:
+                    return ready
+                return self._darc_scheduler.order_ready_tasks(
+                    ready,
+                    worker_id=worker_id,
+                    requests=self.requests,
+                    inflight_tasks=set(self._inflight_tasks),
+                    get_dag=self._get_dag,
+                    now=time.perf_counter(),
+                )
         if not self._sailp_enabled:
             return self._get_ready_tasks()
         strict_candidates: List[Tuple[Tuple[float, float, int], str, Operator]] = []
@@ -516,6 +547,8 @@ class MultiRequestOptimizer:
                 step = q.schedule_plan.steps.get(op.id)
                 if step is not None:
                     plan_note = f" planned_worker={step.worker_id} reuse={step.reuse_from or 'cold'}"
+            elif self._darc_enabled:
+                plan_note = " darc=online"
             print(
                 f"[OPT] -> Worker {worker_id} op={op.id} query_ids=[{uid}]{plan_note} "
                 f"t={time.perf_counter():.1f}",

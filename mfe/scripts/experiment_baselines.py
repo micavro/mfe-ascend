@@ -420,7 +420,7 @@ def run_once(args: argparse.Namespace, questions: List[Dict[str, Any]], repeat_i
 def main() -> None:
     p = argparse.ArgumentParser(description="Run MFE baseline scheduler experiments")
     p.add_argument("--questions-file", required=True)
-    p.add_argument("--scheduler", choices=("fcfs", "sjf", "eager", "sailp"), default="fcfs")
+    p.add_argument("--scheduler", choices=("fcfs", "sjf", "eager", "sailp", "darc"), default="fcfs")
     p.add_argument("--output-length", choices=sorted(OUTPUT_TOKENS), default="medium")
     p.add_argument("--output-max-tokens", type=int, default=None, help="override the max generated tokens for every DAG op")
     p.add_argument("--repeat", type=int, default=1)
