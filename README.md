@@ -14,6 +14,8 @@ MFE Ascend 是基于 `micavro/mfe` 的昇腾迁移版本。它保留原来的 YA
 
 推荐使用 `deploy/run_unified.sh` 作为 A800/CUDA 和 Ascend/NPU 的统一入口。profile 只决定后端类型；卡数和卡号由运行参数指定。
 
+公司 Ascend 现场的 Docker 启动、环境检查、FCFS/SJF/RH-SAIL 顺序运行、监控和自动结果简报，见 [公司 Ascend 三策略实验现场手册](docs/company-ascend-benchmark-runbook.md)。
+
 Ascend 8 卡环境示例：
 
 ```bash
