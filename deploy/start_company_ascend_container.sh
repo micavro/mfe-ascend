@@ -3,7 +3,7 @@ set -euo pipefail
 
 IMAGE="${IMAGE:?Set IMAGE to a locally available, company-approved vllm-ascend image}"
 HOST_WORK="${HOST_WORK:?Set HOST_WORK to the host directory containing mfe-ascend and models}"
-NPU_DEVICE_IDS="${NPU_DEVICE_IDS:-0,1,2,3,4,5,6,7}"
+NPU_DEVICE_IDS="${NPU_DEVICE_IDS:-0,1,2,3,4}"
 CONTAINER_NAME="${CONTAINER_NAME:-mfe-ascend-company}"
 CONTAINER_WORK="${CONTAINER_WORK:-/data/mfe}"
 SHM_SIZE="${SHM_SIZE:-16g}"
