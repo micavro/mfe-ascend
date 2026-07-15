@@ -7,11 +7,11 @@ cd "$PROJECT_ROOT"
 
 PYTHON_BIN="${PYTHON_BIN:-python}"
 MODEL_PATH="${MODEL_PATH:?Set MODEL_PATH to the model directory inside the container}"
-QUESTIONS_FILE="${QUESTIONS_FILE:-$PROJECT_ROOT/data/experiments_design7/mixed_medium_first200.jsonl}"
+QUESTIONS_FILE="${QUESTIONS_FILE:-$PROJECT_ROOT/data/experiments_design7/mixed_medium_first50.jsonl}"
 DEVICE_IDS="${DEVICE_IDS:-0,1,2,3,4}"
 EXPECTED_DEVICE_COUNT="${EXPECTED_DEVICE_COUNT:-}"
-EXPECTED_REQUESTS="${EXPECTED_REQUESTS:-1400}"
-POISSON_RATE="${POISSON_RATE:?Set POISSON_RATE explicitly, for example 0.12 or 0.15}"
+EXPECTED_REQUESTS="${EXPECTED_REQUESTS:-350}"
+POISSON_RATE="${POISSON_RATE:?Set POISSON_RATE explicitly, for example 0.12 or 0.03}"
 ARRIVAL_SEED="${ARRIVAL_SEED:-20260709}"
 ARRIVAL_BATCH_SIZE="${ARRIVAL_BATCH_SIZE:-1}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-32768}"
@@ -26,7 +26,7 @@ if [[ -z "$EXPECTED_DEVICE_COUNT" ]]; then
 fi
 
 rate_tag="${POISSON_RATE//./}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-$PROJECT_ROOT/outputs/$(date +%Y%m%d-%H%M%S)-company-ascend-poisson${rate_tag}}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$PROJECT_ROOT/outputs/$(date +%Y%m%d-%H%M%S)-company-ascend-first50-poisson${rate_tag}}"
 
 if [[ ! -d "$MODEL_PATH" ]]; then
   echo "ERROR: model directory does not exist: $MODEL_PATH" >&2

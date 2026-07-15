@@ -3,7 +3,7 @@
 两台服务器都已经有配置好 Python、vLLM Ascend，并映射了 8 张 NPU 的 Docker。这里不创建新容器；进入现有容器后，可以一次注册 FCFS、SJF、RH-SAIL 三个实验并让它们顺序执行，也可以逐个手动运行以便排障。
 
 - 服务器 A：`0.12 req/s`，顺序运行 FCFS、SJF、RH-SAIL。
-- 服务器 B：`0.15 req/s`，顺序运行 FCFS、SJF、RH-SAIL。
+- 服务器 B：`0.03 req/s`，顺序运行 FCFS、SJF、RH-SAIL。
 - Docker 虽然映射 8 张卡，实验只使用 `0,1,2,3,4` 五张卡。
 - 假设容器内项目是 `/x/mfe-ascend`，模型是 `/x/Meta-Llmama-3.1-8B-Instruct`。
 
@@ -50,13 +50,13 @@ docker exec -it <现有容器名> bash
 
 ## 3. 设置路径、速率和五卡环境
 
-服务器 A 使用 `RATE=0.12`，服务器 B 改成 `RATE=0.15`：
+服务器 A 使用 `RATE=0.12`，服务器 B 改成 `RATE=0.03`。两台机器都只更换为 `first50` 数据，其他实验参数保持一致：
 
 ```bash
 export X=/x
 export PROJECT=$X/mfe-ascend
 export MODEL_PATH=$X/Meta-Llmama-3.1-8B-Instruct
-export QUESTIONS_FILE=$PROJECT/data/experiments_design7/mixed_medium_first200.jsonl
+export QUESTIONS_FILE=$PROJECT/data/experiments_design7/mixed_medium_first50.jsonl
 
 export RATE=0.12
 export DEVICE_IDS=0,1,2,3,4
@@ -95,7 +95,50 @@ ps -eo pid,args |
 python -c "import torch,torch_npu,vllm,vllm_ascend; print('visible_npu=',torch.npu.device_count()); print('vllm=',vllm.__version__)"
 ```
 
-必须满足：请求数为 `1400`、`visible_npu=5`、模型和数据均为 `OK`。如果进程检查显示活跃的 `vllm serve`，不能在同一批 NPU 上继续实验；不要自动停止不属于自己的进程。
+必须满足：请求数为 `350`、`visible_npu=5`、模型和数据均为 `OK`。如果进程检查显示活跃的 `vllm serve`，不能在同一批 NPU 上继续实验；不要自动停止不属于自己的进程。
+
+`0.03 req/s` 的负载较轻，但运行时间并不短：350 个请求的期望到达时长约为 `350 / 0.03 = 11667s`，即每个策略约 3.24 小时，三个策略顺序运行仅到达过程就约 9.7 小时。`0.12 req/s` 每个策略的期望到达时长约 48.6 分钟。
+
+### 3A. 注销已经注册的旧 first200/1400 批次
+
+修改 `QUESTIONS_FILE` 不会改变已经启动的进程。如果旧的 1400 请求批次仍在运行，不能直接在同一组 NPU 上启动新的 350 请求批次。先列出符合 `first200 + 1400` 的旧结果目录：
+
+```bash
+for config in /x/outputs/*/run_config.txt; do
+  if grep -qx 'request_count=1400' "$config" && \
+     grep -q 'questions_file=.*mixed_medium_first200.jsonl' "$config"; then
+    dirname "$config"
+  fi
+done
+```
+
+从输出中选择仍在运行的旧批次；不要选择新的 `first50` 目录：
+
+```bash
+export OLD_RUN_ROOT=/x/outputs/<旧的 first200/1400 结果目录>
+cat "$OLD_RUN_ROOT/run_config.txt"
+cat "$OLD_RUN_ROOT/runner.pid"
+```
+
+必须人工确认配置中包含旧数据文件 `mixed_medium_first200.jsonl` 和 `request_count=1400`。然后运行专用注销脚本：
+
+```bash
+cd /x/mfe-ascend
+bash deploy/cancel_company_ascend_sweep.sh "$OLD_RUN_ROOT"
+```
+
+脚本会再次校验目录、数据文件、请求数、runner PID 和进程命令，并显示该 runner 的完整子进程树。只有手动输入 `CANCEL-1400` 才会发出终止信号。它先等待进程正常退出，必要时只强制结束此前确认的同一进程树；不会执行 `pkill python`、`pkill vllm`，也不会影响其他容器或其他任务。旧目录不会删除，而是创建 `CANCELLED` 和 `FAILED` 标记。
+
+注销后检查旧进程已经消失、五张目标 NPU 已经释放：
+
+```bash
+OLD_RUNNER_PID="$(cat "$OLD_RUN_ROOT/runner.pid")"
+kill -0 "$OLD_RUNNER_PID" 2>/dev/null && echo STILL_RUNNING || echo OLD_RUN_STOPPED
+test -f "$OLD_RUN_ROOT/CANCELLED" && echo OLD_RUN_CANCELLED
+npu-smi info
+```
+
+必须看到 `OLD_RUN_STOPPED`，并确认设备 `0,1,2,3,4` 上没有旧实验进程，才能继续注册新的 first50 批次。不要直接删除旧输出目录，也不要使用无范围的 `killall` 或 `pkill`。
 
 ## 4. 预检并注册三个策略
 
@@ -120,10 +163,10 @@ bash deploy/run_unified.sh company-ascend \
 
 ```bash
 RATE_TAG="${RATE/./}"
-export RUN_ROOT="$X/outputs/$(date +%Y%m%d-%H%M%S)-rate${RATE_TAG}-fcfs-sjf-rhsail"
+export RUN_ROOT="$X/outputs/$(date +%Y%m%d-%H%M%S)-first50-rate${RATE_TAG}-fcfs-sjf-rhsail"
 export LAUNCH_LOG="$X/outputs/launcher-$(basename "$RUN_ROOT").log"
 
-export EXPECTED_REQUESTS=1400
+export EXPECTED_REQUESTS=350
 export POISSON_RATE="$RATE"
 export ARRIVAL_SEED=20260709
 export ARRIVAL_BATCH_SIZE=1
@@ -154,7 +197,7 @@ cat "$RUN_ROOT/run_config.txt"
 tail -F "$RUN_ROOT/runner.log"
 ```
 
-退出 `tail` 按 `Ctrl+C`，不会停止后台实验。批量模式会自动检查每个策略的 `1400/1400`、扫描错误、生成最终简报并创建 `DONE`。
+退出 `tail` 按 `Ctrl+C`，不会停止后台实验。批量模式会自动检查每个策略的 `350/350`、扫描错误、生成最终简报并创建 `DONE`。
 
 ### 4B. 逐个手动运行，作为排障备用
 
@@ -162,7 +205,7 @@ tail -F "$RUN_ROOT/runner.log"
 
 ```bash
 RATE_TAG="${RATE/./}"
-export RUN_ROOT="$X/outputs/$(date +%Y%m%d-%H%M%S)-rate${RATE_TAG}-fcfs-sjf-rhsail"
+export RUN_ROOT="$X/outputs/$(date +%Y%m%d-%H%M%S)-first50-rate${RATE_TAG}-fcfs-sjf-rhsail"
 mkdir -p "$RUN_ROOT"
 set -o pipefail
 
@@ -228,7 +271,7 @@ cat "$RUN_ROOT/rhsail/brief_summary.txt"
 
 后续任务的 `POISSON_RATE`、prefix caching、eager/graph 模式、模型长度和显存比例必须与当前 FCFS 完全相同，否则三者不可直接比较。
 
-如果 FCFS 已经结束并且 `brief_summary.txt` 显示 `1400/1400、100%`，在原终端执行：
+如果 FCFS 已经结束并且 `brief_summary.txt` 显示 `350/350、100%`，在原终端执行：
 
 ```bash
 cd "$PROJECT"
@@ -294,7 +337,7 @@ export MODEL_PATH="$MODEL_PATH"
 export QUESTIONS_FILE="$QUESTIONS_FILE"
 export DEVICE_IDS="$DEVICE_IDS"
 export EXPECTED_DEVICE_COUNT=5
-export EXPECTED_REQUESTS=1400
+export EXPECTED_REQUESTS=350
 export POISSON_RATE="$POISSON_RATE"
 export ARRIVAL_SEED=20260709
 export ARRIVAL_BATCH_SIZE=1
@@ -340,13 +383,13 @@ test -n "$RUN_ROOT" && test -d "$RUN_ROOT" || {
 echo "RUN_ROOT=$RUN_ROOT"
 ```
 
-先确认实际生效的参数。服务器 A 的 `poisson_rate` 应为 `0.12`，服务器 B 应为 `0.15`：
+先确认实际生效的参数。服务器 A 的 `poisson_rate` 应为 `0.12`，服务器 B 应为 `0.03`：
 
 ```bash
 cat "$RUN_ROOT/run_config.txt"
 ```
 
-重点检查 `request_count=1400`、`device_ids=0,1,2,3,4`、`expected_device_count=5`、`schedulers=fcfs sjf rhsail`、`arrival_batch_size=1`、`max_model_len=32768`、`output_max_tokens=2048`、`gpu_memory_utilization=0.75` 和 `prefix_caching=0`。
+重点检查 `request_count=350`、`device_ids=0,1,2,3,4`、`expected_device_count=5`、`schedulers=fcfs sjf rhsail`、`arrival_batch_size=1`、`max_model_len=32768`、`output_max_tokens=2048`、`gpu_memory_utilization=0.75` 和 `prefix_caching=0`。
 
 查看当前策略、已经完成的策略和各策略的最新进度：
 
@@ -357,7 +400,7 @@ grep -E 'START scheduler=|DONE scheduler=|ALL DONE|FAILED' \
 for scheduler in fcfs sjf rhsail; do
   if test -f "$RUN_ROOT/$scheduler.log"; then
     printf '%-8s ' "$scheduler"
-    grep -aoE 'waiting: [0-9]+/1400 completed' \
+    grep -aoE 'waiting: [0-9]+/350 completed' \
       "$RUN_ROOT/$scheduler.log" | tail -1
   fi
 done
@@ -430,21 +473,21 @@ test ! -s "$RUN_ROOT/error_scan.txt" || {
 ```bash
 python -m mfe.scripts.summarize_scheduler_runs "$RUN_ROOT" \
   --schedulers fcfs sjf rhsail \
-  --expected-count 1400
+  --expected-count 350
 
 touch "$RUN_ROOT/DONE"
 cat "$RUN_ROOT/final_brief.txt"
 ```
 
-FCFS、SJF、RH-SAIL 都必须显示 `done=1400/1400 ok=100.0%`，并且存在 `DONE`、不存在错误关键词。
+FCFS、SJF、RH-SAIL 都必须显示 `done=350/350 ok=100.0%`，并且存在 `DONE`、不存在错误关键词。
 
 ## 6. 结果位置
 
 因为输出写在 Docker 挂载目录 `/x`，退出 Docker 后宿主机可以直接访问，不需要 `docker cp`：
 
 ```text
-/x/outputs/<时间>-rate012-fcfs-sjf-rhsail/
-/x/outputs/<时间>-rate015-fcfs-sjf-rhsail/
+/x/outputs/<时间>-first50-rate012-fcfs-sjf-rhsail/
+/x/outputs/<时间>-first50-rate003-fcfs-sjf-rhsail/
 ```
 
 主要文件：

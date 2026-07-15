@@ -6,11 +6,11 @@ HOST_PROJECT="${HOST_PROJECT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 CONTAINER_NAME="${CONTAINER_NAME:?Set CONTAINER_NAME to the running vLLM container name}"
 CONTAINER_PROJECT="${CONTAINER_PROJECT:-/workspace/mfe-ascend}"
 MODEL_PATH="${MODEL_PATH:?Set MODEL_PATH to the model directory inside the container}"
-POISSON_RATE="${POISSON_RATE:?Set POISSON_RATE to 0.12 or 0.15}"
+POISSON_RATE="${POISSON_RATE:?Set POISSON_RATE to 0.12 or 0.03}"
 DEVICE_IDS="${DEVICE_IDS:-0,1,2,3,4}"
 EXPECTED_DEVICE_COUNT="${EXPECTED_DEVICE_COUNT:-5}"
-EXPECTED_REQUESTS="${EXPECTED_REQUESTS:-1400}"
-QUESTIONS_FILE="${QUESTIONS_FILE:-$CONTAINER_PROJECT/data/experiments_design7/mixed_medium_first200.jsonl}"
+EXPECTED_REQUESTS="${EXPECTED_REQUESTS:-350}"
+QUESTIONS_FILE="${QUESTIONS_FILE:-$CONTAINER_PROJECT/data/experiments_design7/mixed_medium_first50.jsonl}"
 SCHEDULERS="${SCHEDULERS:-fcfs sjf rhsail}"
 ARRIVAL_SEED="${ARRIVAL_SEED:-20260709}"
 ARRIVAL_BATCH_SIZE="${ARRIVAL_BATCH_SIZE:-1}"
@@ -21,9 +21,9 @@ COPY_PROJECT="${COPY_PROJECT:-1}"
 SKIP_ACTIVE_SERVICE_CHECK="${SKIP_ACTIVE_SERVICE_CHECK:-0}"
 
 case "$POISSON_RATE" in
-  0.12|0.15) ;;
+  0.12|0.03) ;;
   *)
-    echo "ERROR: this two-machine experiment expects POISSON_RATE=0.12 or 0.15" >&2
+    echo "ERROR: this two-machine experiment expects POISSON_RATE=0.12 or 0.03" >&2
     exit 2
     ;;
 esac
@@ -104,7 +104,7 @@ if [[ "$visible_count" != "$EXPECTED_DEVICE_COUNT" ]]; then
 fi
 
 rate_tag="${POISSON_RATE//./}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-/workspace/mfe-results/$(date +%Y%m%d-%H%M%S)-rate${rate_tag}-fcfs-sjf-rhsail}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/workspace/mfe-results/$(date +%Y%m%d-%H%M%S)-first50-rate${rate_tag}-fcfs-sjf-rhsail}"
 docker exec "$CONTAINER_NAME" mkdir -p "$(dirname "$OUTPUT_ROOT")"
 
 docker exec -d \
