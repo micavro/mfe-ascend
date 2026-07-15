@@ -1,6 +1,6 @@
-# 进入现有 vLLM Docker 后手动运行实验
+# 进入现有 vLLM Docker 后运行实验
 
-两台服务器都已经有配置好 Python、vLLM Ascend，并映射了 8 张 NPU 的 Docker。这里不创建新容器，也不使用宿主机启动器；进入现有容器后，直接手动运行项目里的 `deploy/run_unified.sh`。
+两台服务器都已经有配置好 Python、vLLM Ascend，并映射了 8 张 NPU 的 Docker。这里不创建新容器；进入现有容器后，可以一次注册 FCFS、SJF、RH-SAIL 三个实验并让它们顺序执行，也可以逐个手动运行以便排障。
 
 - 服务器 A：`0.12 req/s`，顺序运行 FCFS、SJF、RH-SAIL。
 - 服务器 B：`0.15 req/s`，顺序运行 FCFS、SJF、RH-SAIL。
@@ -97,7 +97,7 @@ python -c "import torch,torch_npu,vllm,vllm_ascend; print('visible_npu=',torch.n
 
 必须满足：请求数为 `1400`、`visible_npu=5`、模型和数据均为 `OK`。如果进程检查显示活跃的 `vllm serve`，不能在同一批 NPU 上继续实验；不要自动停止不属于自己的进程。
 
-## 4. 预检并手动运行三个策略
+## 4. 预检并注册三个策略
 
 先运行环境预检：
 
@@ -112,7 +112,53 @@ bash deploy/run_unified.sh company-ascend \
   --skip-install
 ```
 
-退出码必须为 0。随后创建输出目录和共同参数：
+退出码必须为 0。接下来二选一：推荐使用 4A 一次注册三个策略；需要逐步排障时使用 4B。
+
+### 4A. 一次注册三个策略，顺序执行
+
+这会一次登记 FCFS、SJF、RH-SAIL，但不会同时运行。脚本等 FCFS 完成后自动启动 SJF，最后启动 RH-SAIL，三者共用同一批五张 NPU。
+
+```bash
+RATE_TAG="${RATE/./}"
+export RUN_ROOT="$X/outputs/$(date +%Y%m%d-%H%M%S)-rate${RATE_TAG}-fcfs-sjf-rhsail"
+export LAUNCH_LOG="$X/outputs/launcher-$(basename "$RUN_ROOT").log"
+
+export EXPECTED_REQUESTS=1400
+export POISSON_RATE="$RATE"
+export ARRIVAL_SEED=20260709
+export ARRIVAL_BATCH_SIZE=1
+export MAX_MODEL_LEN=32768
+export OUTPUT_MAX_TOKENS=2048
+export GPU_MEMORY_UTILIZATION=0.75
+export SCHEDULERS="fcfs sjf rhsail"
+export OUTPUT_ROOT="$RUN_ROOT"
+
+mkdir -p "$X/outputs"
+nohup bash deploy/run_company_ascend_sweep.sh > "$LAUNCH_LOG" 2>&1 &
+export BATCH_PID=$!
+echo "$BATCH_PID" > "${LAUNCH_LOG%.log}.pid"
+
+echo "BATCH_PID=$BATCH_PID"
+echo "RUN_ROOT=$RUN_ROOT"
+echo "LAUNCH_LOG=$LAUNCH_LOG"
+```
+
+不要提前执行 `mkdir -p "$RUN_ROOT"`，也不要把 launcher 日志写进 `RUN_ROOT`；正式脚本会自己创建空结果目录。
+
+确认批次已经开始：
+
+```bash
+cat "$LAUNCH_LOG"
+sleep 2
+cat "$RUN_ROOT/run_config.txt"
+tail -F "$RUN_ROOT/runner.log"
+```
+
+退出 `tail` 按 `Ctrl+C`，不会停止后台实验。批量模式会自动检查每个策略的 `1400/1400`、扫描错误、生成最终简报并创建 `DONE`。
+
+### 4B. 逐个手动运行，作为排障备用
+
+手动模式需要创建结果目录和共同参数：
 
 ```bash
 RATE_TAG="${RATE/./}"
@@ -174,11 +220,21 @@ test "${PIPESTATUS[0]}" -eq 0 || { echo RHSAIL_FAILED; exit 1; }
 cat "$RUN_ROOT/rhsail/brief_summary.txt"
 ```
 
-三个命令只能顺序执行，不能同时占用同一批 NPU。长时间运行时建议在 `tmux` 或 `screen` 会话中操作。
+三个命令只能顺序执行，不能同时占用同一批 NPU。不要同时使用 4A 和 4B。手动模式长时间运行时建议在 `tmux` 或 `screen` 会话中操作。
 
 ## 5. 检查完成并生成简报
 
-三个策略结束后先扫描错误：
+如果使用 4A 批量注册，脚本已经自动完成错误扫描和简报生成，只需验收：
+
+```bash
+grep -E 'START scheduler=|DONE scheduler=|ALL DONE|FAILED' "$RUN_ROOT/runner.log"
+test -f "$RUN_ROOT/DONE" && echo ALL_COMPLETE
+test ! -f "$RUN_ROOT/FAILED" && echo NO_FAILED_MARKER
+test ! -s "$RUN_ROOT/error_scan.txt" && echo NO_FATAL_KEYWORDS
+cat "$RUN_ROOT/final_brief.txt"
+```
+
+如果使用 4B 逐个手动运行，三个策略结束后先扫描错误：
 
 ```bash
 grep -Eain \
