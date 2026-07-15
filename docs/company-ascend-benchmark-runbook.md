@@ -222,6 +222,108 @@ cat "$RUN_ROOT/rhsail/brief_summary.txt"
 
 三个命令只能顺序执行，不能同时占用同一批 NPU。不要同时使用 4A 和 4B。手动模式长时间运行时建议在 `tmux` 或 `screen` 会话中操作。
 
+#### 4B.1. FCFS 已手动启动后，注册剩余两个策略
+
+不能在 FCFS 仍占用 NPU 时直接启动 SJF 或 RH-SAIL。正确做法是等 FCFS 结束后，以 `RESUME=1` 启动完整批次：批处理脚本会验证并跳过已经成功完成的 FCFS，然后顺序运行 SJF 和 RH-SAIL，最后生成包含三个策略的统一简报。
+
+后续任务的 `POISSON_RATE`、prefix caching、eager/graph 模式、模型长度和显存比例必须与当前 FCFS 完全相同，否则三者不可直接比较。
+
+如果 FCFS 已经结束并且 `brief_summary.txt` 显示 `1400/1400、100%`，在原终端执行：
+
+```bash
+cd "$PROJECT"
+
+export POISSON_RATE="$RATE"
+export OUTPUT_ROOT="$RUN_ROOT"
+export SCHEDULERS="fcfs sjf rhsail"
+export RESUME=1
+export REMAIN_LOG="$X/outputs/remaining-$(basename "$RUN_ROOT").log"
+
+nohup bash deploy/run_company_ascend_sweep.sh \
+  > "$REMAIN_LOG" 2>&1 < /dev/null &
+export REMAIN_PID=$!
+
+echo "REMAIN_PID=$REMAIN_PID"
+echo "REMAIN_LOG=$REMAIN_LOG"
+tail -F "$REMAIN_LOG"
+```
+
+日志中应先出现 `SKIP complete scheduler=fcfs`，随后出现 `START scheduler=sjf`。如果 FCFS 不完整，批处理脚本会拒绝续跑并创建 `FAILED`，不会把残缺结果当成成功结果。
+
+如果 FCFS 仍在前台运行，打开第二个终端进入同一个 Docker，重新执行第 3 节以恢复路径、速率和 NPU 环境变量，然后指向当前结果目录：
+
+```bash
+cd /x/mfe-ascend
+export RUN_ROOT=/x/outputs/<当前 FCFS 所在的结果目录>
+
+FCFS_PID="$(pgrep -fo "run_unified.sh.*--scheduler fcfs.*$RUN_ROOT/fcfs")"
+test -n "$FCFS_PID" || {
+  echo FCFS_PROCESS_NOT_FOUND
+  exit 1
+}
+ps -fp "$FCFS_PID"
+```
+
+先核对 FCFS 实际继承的关键环境变量；后续两个策略必须使用相同值：
+
+```bash
+FCFS_PY_PID="$(pgrep -P "$FCFS_PID" -f python | head -1)"
+test -n "$FCFS_PY_PID" && \
+  tr '\0' '\n' < "/proc/$FCFS_PY_PID/environ" \
+  | grep -E '^(MFE_ENABLE_PREFIX_CACHING|MFE_VLLM_ENFORCE_EAGER|MFE_GPU_MEMORY_UTILIZATION|MFE_MAX_MODEL_LEN)='
+```
+
+注册等待任务。下面的 prefix caching 和 eager 值以第 3 节启动 FCFS 的默认配置为例；如果 FCFS 使用了其他值，必须同步修改：
+
+```bash
+export POISSON_RATE="$RATE"
+export QUEUE_SCRIPT="$RUN_ROOT/queue_remaining.sh"
+export REMAIN_LOG="$X/outputs/remaining-$(basename "$RUN_ROOT").log"
+
+cat > "$QUEUE_SCRIPT" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+while kill -0 "$FCFS_PID" 2>/dev/null; do
+  sleep 30
+done
+sleep 20
+
+cd "$PROJECT"
+export MODEL_PATH="$MODEL_PATH"
+export QUESTIONS_FILE="$QUESTIONS_FILE"
+export DEVICE_IDS="$DEVICE_IDS"
+export EXPECTED_DEVICE_COUNT=5
+export EXPECTED_REQUESTS=1400
+export POISSON_RATE="$POISSON_RATE"
+export ARRIVAL_SEED=20260709
+export ARRIVAL_BATCH_SIZE=1
+export MAX_MODEL_LEN=32768
+export OUTPUT_MAX_TOKENS=2048
+export GPU_MEMORY_UTILIZATION=0.75
+
+# 必须与已经运行的 FCFS 保持一致。
+export MFE_ENABLE_PREFIX_CACHING=0
+export MFE_VLLM_ENFORCE_EAGER=1
+
+export OUTPUT_ROOT="$RUN_ROOT"
+export SCHEDULERS="fcfs sjf rhsail"
+export RESUME=1
+
+exec bash deploy/run_company_ascend_sweep.sh
+EOF
+
+chmod +x "$QUEUE_SCRIPT"
+nohup "$QUEUE_SCRIPT" > "$REMAIN_LOG" 2>&1 < /dev/null &
+export QUEUE_PID=$!
+
+echo "QUEUE_PID=$QUEUE_PID"
+echo "REMAIN_LOG=$REMAIN_LOG"
+tail -F "$REMAIN_LOG"
+```
+
+这个等待任务只轮询当前 FCFS 的 PID，不会停止或修改它。FCFS 进程结束后会额外等待 20 秒释放 NPU，再由批处理脚本严格验证 FCFS summary；验证成功才会继续 SJF 和 RH-SAIL。
+
 ### 4C. 运行中检查是否健康
 
 如果重新进入了 Docker，先找回最新一次实验目录；当前终端仍有 `RUN_ROOT` 时不会覆盖它：
