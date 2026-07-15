@@ -222,6 +222,81 @@ cat "$RUN_ROOT/rhsail/brief_summary.txt"
 
 三个命令只能顺序执行，不能同时占用同一批 NPU。不要同时使用 4A 和 4B。手动模式长时间运行时建议在 `tmux` 或 `screen` 会话中操作。
 
+### 4C. 运行中检查是否健康
+
+如果重新进入了 Docker，先找回最新一次实验目录；当前终端仍有 `RUN_ROOT` 时不会覆盖它：
+
+```bash
+export X="${X:-/x}"
+if [[ -z "${RUN_ROOT:-}" ]]; then
+  export RUN_ROOT="$(ls -dt "$X"/outputs/*-fcfs-sjf-rhsail 2>/dev/null | head -1)"
+fi
+test -n "$RUN_ROOT" && test -d "$RUN_ROOT" || {
+  echo "RUN_ROOT_NOT_FOUND"
+  exit 1
+}
+echo "RUN_ROOT=$RUN_ROOT"
+```
+
+先确认实际生效的参数。服务器 A 的 `poisson_rate` 应为 `0.12`，服务器 B 应为 `0.15`：
+
+```bash
+cat "$RUN_ROOT/run_config.txt"
+```
+
+重点检查 `request_count=1400`、`device_ids=0,1,2,3,4`、`expected_device_count=5`、`schedulers=fcfs sjf rhsail`、`arrival_batch_size=1`、`max_model_len=32768`、`output_max_tokens=2048`、`gpu_memory_utilization=0.75` 和 `prefix_caching=0`。
+
+查看当前策略、已经完成的策略和各策略的最新进度：
+
+```bash
+grep -E 'START scheduler=|DONE scheduler=|ALL DONE|FAILED' \
+  "$RUN_ROOT/runner.log"
+
+for scheduler in fcfs sjf rhsail; do
+  if test -f "$RUN_ROOT/$scheduler.log"; then
+    printf '%-8s ' "$scheduler"
+    grep -aoE 'waiting: [0-9]+/1400 completed' \
+      "$RUN_ROOT/$scheduler.log" | tail -1
+  fi
+done
+```
+
+正常情况下，只能有一个已经 `START` 但尚未 `DONE` 的策略。进度应整体持续增长；单个长请求可能让数字短暂停留几分钟，需要结合日志更新时间和 NPU 活动一起判断。
+
+检查批次进程和日志是否还在更新：
+
+```bash
+if test -f "$RUN_ROOT/DONE"; then
+  echo ALL_COMPLETE
+else
+  RUNNER_PID="$(cat "$RUN_ROOT/runner.pid")"
+  ps -fp "$RUNNER_PID"
+  kill -0 "$RUNNER_PID" && echo RUNNER_ALIVE
+fi
+stat -c 'runner.log updated: %y' "$RUN_ROOT/runner.log"
+tail -n 30 "$RUN_ROOT/runner.log"
+```
+
+实验进行中应显示 `RUNNER_ALIVE`。全部完成后 runner 正常退出，此时以 `DONE` 为准。持续查看日志可运行 `tail -F "$RUN_ROOT/runner.log"`；按 `Ctrl+C` 只退出查看，不会停止后台实验。
+
+在另一个终端观察五张 NPU：
+
+```bash
+watch -n 5 npu-smi info
+```
+
+设备 0--4 应有实验进程和稳定的显存占用，利用率可以随泊松到达上下波动。短暂空闲正常；显存持续逼近上限、进程消失或出现 HCCL/ACL 告警则不正常。
+
+随时扫描严重错误：
+
+```bash
+grep -Eain \
+  'out of memory|(^|[^[:alnum:]_])OOM([^[:alnum:]_]|$)|Traceback|CUDA error|context length.*(exceed|error)|maximum context.*(exceed|error)|KV cache.*(failed|error|insufficient)|ACL.*[Ee]rror|HCCL.*[Ee]rror' \
+  "$RUN_ROOT/runner.log" "$RUN_ROOT"/{fcfs,sjf,rhsail}.log 2>/dev/null
+```
+
+没有输出表示未发现这些严重错误。不要因为进度短暂停留而手动重启；先同时确认 runner、日志时间、NPU 活动和错误扫描。
+
 ## 5. 检查完成并生成简报
 
 如果使用 4A 批量注册，脚本已经自动完成错误扫描和简报生成，只需验收：
