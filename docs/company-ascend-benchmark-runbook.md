@@ -510,3 +510,38 @@ cat "$RUN_ROOT/fcfs/brief_summary.txt"
 cat "$RUN_ROOT/sjf/brief_summary.txt"
 cat "$RUN_ROOT/rhsail/brief_summary.txt"
 ```
+
+## 7. 从已完成数据生成详细简报
+
+这一步只读取已经生成的 detail JSON 和 summary JSON，不会重新运行模型，也不会覆盖原有的 `final_brief.*`。两台机器的结果目录不同，因此在每台机器上分别设置自己的 `RUN_ROOT` 并运行一次：
+
+```bash
+cd /x/mfe-ascend
+export RUN_ROOT=/x/outputs/<本机已经完成的 first50 结果目录>
+
+test -f "$RUN_ROOT/DONE" && echo RUN_COMPLETE
+python mfe/scripts/summarize_scheduler_runs_detailed.py "$RUN_ROOT" \
+  --schedulers fcfs sjf rhsail \
+  --expected-count 350 \
+  --prefix detailed_brief
+```
+
+脚本要求三个策略均为 `350/350、100%`；数据缺失或不完整时会直接报错，不会生成看似完整的简报。成功后查看：
+
+```bash
+cat "$RUN_ROOT/detailed_brief.txt"
+cat "$RUN_ROOT/detailed_brief.md"
+```
+
+新增文件：
+
+```text
+detailed_brief.md               完整 Markdown 简报，包含总览和 dataset 对比表
+detailed_brief.txt              适合终端查看的核心指标
+detailed_brief_overall.csv      每个策略一行的完整总体指标
+detailed_brief_by_dataset.csv   每个 dataset × 策略一行的 service/run time
+```
+
+总体指标包括 input/output/total tokens/s、平均 run time、P99/Max service、P99/Max completion、P95 最大算子间空档、调度开销秒数及 makespan 占比，并保留 makespan、到达结束、排空、等待、ready 和 device busy。dataset 表比较 FCFS、SJF、RH-SAIL 的平均 service time 与平均 run time。
+
+这里的 `run time` 是每个请求全部 op duration 的求和，不含排队等待和 op 间空档；并行 op 的 duration 分别计入，因此 run time 可能大于从首个 op 开始到请求完成的 service window。`P95 max gap` 的计算方式是先合并每个请求内重叠的 op 活跃区间，取该请求最大的相邻区间空档，再对全部请求的最大空档取 P95。
