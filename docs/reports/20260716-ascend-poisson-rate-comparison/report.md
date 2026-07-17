@@ -192,3 +192,12 @@ Dataset 结果进一步说明 SJF 的长任务饥饿问题。`0.12` 下，RH-SAI
 5. **固定生成随机性。** 使用 greedy decoding 或 per-request 固定 seed，并记录各策略实际 input/output token 总数，避免生成长度差异混入调度比较。
 
 进一步需要回答的核心问题是：RH-SAIL 能否在继续保持 ready 有界和 SJF 级长请求连续性的同时，引入全局 arrival-age/backlog 代价，逼近 SJF 的平均完成时间与 FCFS 的 completion tail。这个问题决定其优势能否从“调度面稳定”转化为端到端用户收益。
+
+## 9. first50 A800 对照与后续报告
+
+匹配配置的 NVIDIA A800 五卡实验现已完成，覆盖相同的 `mixed_medium_first50`、350 请求、arrival seed、FCFS/SJF/RH-SAIL，以及共同 rate `0.03/0.12`；另增加 `0.15` 作为 A800 饱和参考。九项 A800 实验均为 `350/350`、成功率 `100%`，且无 OOM、context、KV cache、Traceback、CUDA 或 NCCL 错误。
+
+- [NVIDIA A800 first50 三速率调度性能报告](../20260717-a800-first50-rate-sweep/report.md)
+- [Ascend 910B4 与 NVIDIA A800 first50 纯性能对比报告](../20260717-ascend-a800-first50-performance-comparison/report.md)
+
+直接硬件比较只使用两侧匹配的 `0.03/0.12`。在 `0.12` 下，A800 的端到端 total tok/s 是 Ascend 的 `3.79--3.89×`，平均 op run time 快 `4.35--4.53×`，排空时间缩短 `79--135×`。在 `0.03` 下，端到端吞吐只提高 `3%--8%`，因为两侧 makespan 都由相同的长 arrival window 主导；此时 run time 仍显示 A800 快 `4.26--4.57×`。A800 `0.15` 没有匹配 NPU 数据，仅用于定位其饱和点，不做直接倍率比较。
